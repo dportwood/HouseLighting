@@ -104,3 +104,14 @@ def test_parse_color():
     assert effects.parse_color("#FF3000") == (255, 48, 0)
     with pytest.raises(ValueError):
         effects.parse_color("FFF")
+
+
+def test_locate_lights_blocks_from_first_pixel(layout):
+    frame = np.zeros(layout.total_channels, dtype=np.uint8)
+    line = layout.model("Line")
+    key = effects.locate(frame, line, first=5, block=3)
+    assert [(a, b) for a, b, _ in key] == [(5, 7), (8, 10)]
+    px = frame[:30].reshape(-1, 3)
+    assert not px[:4].any()
+    assert tuple(px[4]) == effects.LOCATE_COLORS[0]
+    assert tuple(px[9]) == effects.LOCATE_COLORS[1]

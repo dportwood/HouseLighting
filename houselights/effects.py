@@ -43,6 +43,25 @@ def chase(
         frame[m.start - 1 : m.end].reshape(-1, 3)[:] = palette[band]
 
 
+LOCATE_COLORS = [(255, 255, 255), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (0, 255, 255), (255, 0, 255)]
+
+
+def locate(frame: np.ndarray, model: Model, first: int, block: int) -> list[tuple[int, int, tuple[int, int, int]]]:
+    """Light pixels `first`..end of `model` (1-based) in color blocks of `block` pixels; the rest stay dark.
+
+    Returns [(from_pixel, to_pixel, color)] so the caller can print a key.
+    """
+    px = frame[model.start - 1 : model.end].reshape(-1, 3)
+    px[:] = 0
+    key = []
+    for i, lo in enumerate(range(first, model.nodes + 1, block)):
+        hi = min(lo + block - 1, model.nodes)
+        color = LOCATE_COLORS[i % len(LOCATE_COLORS)]
+        px[lo - 1 : hi] = color
+        key.append((lo, hi, color))
+    return key
+
+
 def models_for(layout: Layout, controllers: list[str] | None = None) -> list[Model]:
     """All models, or only those on the given controllers (by name or IP)."""
     if not controllers:

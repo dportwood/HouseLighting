@@ -4,6 +4,7 @@
   solid  --color RRGGBB      hold one color
   chase  --colors A,B,...    live chase along every string
   play   FILE.fseq           play a rendered xLights sequence directly over DDP
+  locate --model NAME        light the end of one string in color blocks to find a dead pixel
 """
 
 from __future__ import annotations
@@ -47,6 +48,12 @@ def main(argv: list[str] | None = None) -> None:
     pl.add_argument("file")
     pl.add_argument("--loops", type=int, default=1)
 
+    lo = sub.add_parser("locate")
+    lo.add_argument("--model", required=True)
+    lo.add_argument("--first", type=int, default=1, help="first pixel to light (1-based)")
+    lo.add_argument("--block", type=int, default=5, help="pixels per color block")
+    lo.add_argument("--seconds", type=float, default=60.0)
+
     args = p.parse_args(argv)
     layout = load_layout(args.show_dir)
 
@@ -69,6 +76,13 @@ def main(argv: list[str] | None = None) -> None:
             colors = [effects.parse_color(x) for x in args.colors.split(",")]
             _run(out, frame, args.fps, args.seconds,
                  lambda t: effects.chase(frame, models, colors, t, args.band, args.speed))
+        elif args.cmd == "locate":
+            model = layout.model(args.model)
+            key = effects.locate(frame, model, args.first, args.block)
+            names = dict(zip(effects.LOCATE_COLORS, ["white", "red", "green", "blue", "yellow", "cyan", "magenta"]))
+            for a, b, color in key:
+                print(f"  pixels {a:>3}-{b:<3} {names[color]}")
+            _run(out, frame, args.fps, args.seconds, lambda t: None)
         elif args.cmd == "play":
             _play(out, frame, Path(args.file), args.loops)
     except KeyboardInterrupt:

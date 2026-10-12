@@ -41,8 +41,28 @@
   .row { display: flex; gap: 10px; } .row > * { flex: 1; }
   .ghost { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); font-weight: 600; cursor: pointer; }
   canvas { width: 100%; display: block; border-radius: 10px; background: #000; }
-  .msg { min-height: 20px; color: var(--warn); font-size: 14px; }
+  .msg { color: var(--warn); font-size: 14px; }
+  .msg:empty { display: none; }
   .hidden { display: none !important; }
+  .tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 -4px; background: var(--bg); border-radius: 14px; }
+  .tabs button { min-height: 46px; border-radius: 10px; border: 0; background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 600; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--text); color: var(--bg); }
+  .tab { display: grid; gap: 16px; }
+  h2 .meta { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .pl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .pl li { position: relative; display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .pl li.current { border-color: var(--accent); background: rgba(255, 122, 26, .08); }
+  .pl .num { color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; font-weight: 600; }
+  .pl li.current .num { color: var(--accent); }
+  .pl .name { font-weight: 600; overflow-wrap: anywhere; }
+  .pl .sub { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pl .dots { display: inline-flex; gap: 3px; }
+  .pl .dots i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .badge { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .badge.playing { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .pl .play { min-height: 40px; padding: 0 16px; }
+  .pl .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); transition: width 1s linear; }
+  .empty { color: var(--muted); margin: 0; }
 </style>
 </head>
 <body>
@@ -52,6 +72,13 @@
     <div class="status"><span id="statusText">Connecting…</span><span class="dot" id="statusDot"></span></div>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tabBtn-controls" aria-controls="tab-controls" aria-selected="true">Controls</button>
+    <button role="tab" id="tabBtn-playlist" aria-controls="tab-playlist" aria-selected="false">Playlist</button>
+  </nav>
+  <div class="msg" id="msg" role="status"></div>
+
+  <div class="tab" id="tab-controls" role="tabpanel">
   <section>
     <h2>Themes</h2>
     <div class="presets" id="presets"></div>
@@ -77,7 +104,6 @@
   </section>
 
   <button class="big" id="resume">Back to the show</button>
-  <div class="msg" id="msg" role="status"></div>
 
   <section>
     <h2>Preview</h2>
@@ -91,12 +117,21 @@
       <button class="ghost" id="off">Lights off</button>
     </div>
   </section>
+  </div>
+
+  <div class="tab hidden" id="tab-playlist" role="tabpanel">
+    <section>
+      <h2>Playlist <span class="meta" id="plMeta"></span></h2>
+      <ol class="pl" id="playlist"></ol>
+      <p class="empty hidden" id="plIdle">Nothing is playing right now.</p>
+    </section>
+  </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const MAX_COLORS = 16;
 const state = { effect: "chase", colors: ["#400080", "#FF3000"], speed: 40, band: 8, brightness: 100 };
-let presets = {}, dirty = false, sendTimer = null, lastEdit = 0;
+let presets = {}, dirty = false, sendTimer = null, lastEdit = 0, isAdmin = false, tab = "controls";
 
 async function api(path, body) {
   const opts = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
@@ -205,9 +240,106 @@ async function poll() {
   try { showStatus(await api("/api/status")); } catch (e) { $("statusText").textContent = "Can't reach the player"; $("statusDot").className = "dot"; }
 }
 
+function showTab(name) {
+  tab = name;
+  for (const t of ["controls", "playlist"]) {
+    $("tab-" + t).classList.toggle("hidden", t !== name);
+    $("tabBtn-" + t).setAttribute("aria-selected", String(t === name));
+  }
+  history.replaceState(null, "", name === "playlist" ? "#playlist" : location.pathname);
+  if (name === "playlist") loadPlaylist();
+}
+
+const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+function badge(text, cls = "") {
+  const b = document.createElement("span");
+  b.className = "badge " + cls;
+  b.textContent = text;
+  return b;
+}
+
+// Rebuilding the list every poll would replace buttons under the user's finger,
+// so only rebuild when the shape changes; otherwise just move the clock and bar.
+let plKey = "", plProgress = null;
+
+async function loadPlaylist() {
+  if (document.hidden || tab !== "playlist") return;
+  let pl;
+  try { pl = await api("/api/playlist"); } catch { return; }
+  const key = JSON.stringify([pl.items, pl.current, pl.paused, pl.next, isAdmin]);
+  if (key === plKey) {
+    if (plProgress) plProgress(pl.position);
+    return;
+  }
+  plKey = key;
+  plProgress = null;
+  const total = pl.items.reduce((a, i) => a + i.seconds, 0);
+  $("plMeta").textContent = `${pl.items.length} items · ${fmtTime(total)}${pl.shuffle ? " · shuffled" : ""}`;
+  $("plIdle").classList.toggle("hidden", pl.current !== null);
+  const list = $("playlist");
+  list.innerHTML = "";
+  pl.items.forEach(item => {
+    const li = document.createElement("li");
+    const isCurrent = item.index === pl.current;
+    li.classList.toggle("current", isCurrent);
+
+    const num = document.createElement("span");
+    num.className = "num";
+    num.textContent = isCurrent ? (pl.paused ? "❚❚" : "▶") : item.index + 1;
+
+    const body = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "name";
+    name.textContent = item.name;
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    const kind = item.type === "fseq" ? "Sequence" : "Live effect";
+    const time = document.createElement("span");
+    time.textContent = `${kind} · ${fmtTime(item.seconds)}`;
+    sub.append(time);
+    if (item.colors) {
+      const dots = document.createElement("span");
+      dots.className = "dots";
+      item.colors.forEach(c => { const d = document.createElement("i"); d.style.background = c; dots.append(d); });
+      sub.append(dots);
+    }
+    body.append(name, sub);
+
+    let right = document.createElement("span");
+    if (isCurrent) {
+      right = badge(pl.paused ? "Paused" : "Playing", "playing");
+    } else if (isAdmin) {
+      right = document.createElement("button");
+      right.className = "ghost play";
+      right.textContent = "Play";
+      right.setAttribute("aria-label", "Play " + name.textContent + " now");
+      right.addEventListener("click", async () => {
+        try { showStatus(await api("/api/play", { index: item.index })); say(""); plKey = ""; loadPlaylist(); } catch (e) { say(e.message); }
+      });
+      if (item.index === pl.next) sub.append(badge("Up next"));
+    } else if (item.index === pl.next) {
+      right = badge("Up next");
+    }
+    li.append(num, body, right);
+
+    if (isCurrent) {
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      li.append(bar);
+      plProgress = position => {
+        time.textContent = `${kind} · ${fmtTime(Math.min(position, item.seconds))} / ${fmtTime(item.seconds)}`;
+        bar.style.width = `${Math.min(100, 100 * position / item.seconds)}%`;
+      };
+      plProgress(pl.position);
+    }
+    list.append(li);
+  });
+}
+
 // Preview: one row per model, pixels scaled to the canvas width.
 async function drawPreview() {
-  if (document.hidden) return;
+  if (document.hidden || tab !== "controls") return;
   let data;
   try { data = await api("/api/preview"); } catch { return; }
   const cv = $("preview"), ctx = cv.getContext("2d");
@@ -235,6 +367,8 @@ for (const k of ["speed", "band", "brightness"]) {
 $("resume").addEventListener("click", async () => { try { showStatus(await api("/api/resume", {})); lastEdit = 0; } catch (e) { say(e.message); } });
 $("skip").addEventListener("click", async () => { try { showStatus(await api("/api/skip", {})); } catch (e) { say(e.message); } });
 $("off").addEventListener("click", async () => { try { showStatus(await api("/api/off", {})); } catch (e) { say(e.message); } });
+$("tabBtn-controls").addEventListener("click", () => showTab("controls"));
+$("tabBtn-playlist").addEventListener("click", () => showTab("playlist"));
 
 (async function init() {
   try {
@@ -242,12 +376,16 @@ $("off").addEventListener("click", async () => { try { showStatus(await api("/ap
     presets = opts.presets;
     renderEffects(opts.effects);
     renderPresets();
+    isAdmin = opts.admin;
     $("admin").classList.toggle("hidden", !opts.admin);
   } catch (e) { say(e.message); }
   renderSwatches(); syncSliders();
   await poll();
   setInterval(poll, 2000);
   setInterval(drawPreview, 250);
+  setInterval(loadPlaylist, 1000);
+  if (location.hash === "#playlist") showTab("playlist");
+  addEventListener("hashchange", () => showTab(location.hash === "#playlist" ? "playlist" : "controls"));
 })();
 </script>
 </body>

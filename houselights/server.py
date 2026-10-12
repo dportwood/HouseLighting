@@ -5,12 +5,14 @@ Open to anyone on the network (the tablet):
   GET  /api/status       what's playing, live settings, schedule window
   GET  /api/options      effects and color presets for the page
   GET  /api/preview      last frame sent, per model, as hex RGB
+  GET  /api/playlist     playlist items, what's playing and how far in, what's next
   POST /api/live         {"effect", "colors": ["#RRGGBB"...], "speed", "band", "brightness"}
   POST /api/resume       drop the live override and go back to the show
 
 Admin (need `api_token` from the config, as X-Api-Token header or ?token=, when one is set):
   POST /api/off          lights off until Resume or the next show window
   POST /api/skip         next playlist item
+  POST /api/play         {"index": n} play playlist item n now
 """
 
 from __future__ import annotations
@@ -66,6 +68,8 @@ class _Handler(BaseHTTPRequestHandler):
             })
         if path == "/api/preview":
             return self._json(self._preview())
+        if path == "/api/playlist":
+            return self._json(self.player.playlist())
         self._error(404, "Not found")
 
     def do_POST(self):
@@ -78,10 +82,17 @@ class _Handler(BaseHTTPRequestHandler):
                 self.player.set_live(_live_params(body))
             elif path == "/api/resume":
                 self.player.resume()
-            elif path in ("/api/off", "/api/skip"):
+            elif path in ("/api/off", "/api/skip", "/api/play"):
                 if not self._admin_ok():
                     return self._error(403, "Admin token required")
-                self.player.turn_off() if path == "/api/off" else self.player.skip()
+                if path == "/api/off":
+                    self.player.turn_off()
+                elif path == "/api/skip":
+                    self.player.skip()
+                else:
+                    if not self.player.in_window():
+                        return self._error(409, "The show is off right now")
+                    self.player.play_item(int(body["index"]))
             else:
                 return self._error(404, "Not found")
         except (ValueError, TypeError, KeyError) as e:

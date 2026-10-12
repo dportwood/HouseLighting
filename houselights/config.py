@@ -42,7 +42,7 @@ class Item:
     def describe(self) -> str:
         if self.type == "fseq":
             return self.file.stem
-        return f"{self.effect} ({', '.join('#%02X%02X%02X' % c for c in self.params['colors'])})"
+        return self.effect.capitalize()
 
 
 @dataclass

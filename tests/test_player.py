@@ -83,7 +83,7 @@ def test_playlist_plays_in_order_and_advances(tmp_path):
     assert pixels(player.tick(0.0))[0] == (1, 1, 1)
     assert pixels(player.tick(0.06))[0] == (2, 2, 2)
     assert pixels(player.tick(0.11))[0] == PURPLE  # fseq finished -> solid effect
-    assert player.status(0.11)["playing"].startswith("solid")
+    assert player.status(0.11)["playing"] == "Solid"
     assert pixels(player.tick(1.2))[0] == (1, 1, 1)  # effect's 1 s is up -> back to the fseq
 
 
@@ -194,3 +194,37 @@ def test_api_page_options_preview(api):
     assert call("/api/options")[1]["effects"] == ["chase", "fade", "twinkle", "strobe", "solid"]
     preview = call("/api/preview")[1]["models"]
     assert preview == [{"name": "Line", "controller": "A", "rgb": "01" * 12}]
+
+
+def test_playlist_reports_current_position_and_next(tmp_path):
+    player, _ = make_player(tmp_path)
+    player.tick(0.0)
+    pl = player.playlist(0.05)
+    assert [(i["name"], i["type"], i["seconds"]) for i in pl["items"]] == [("a", "fseq", 0.1), ("Solid", "effect", 1.0)]
+    assert pl["items"][1]["colors"] == ["#400080"]
+    assert (pl["current"], pl["position"], pl["next"], pl["paused"]) == (0, 0.1, 1, False)
+    player.set_live({"colors": [ORANGE]}, now_t=0.06)
+    assert player.playlist(0.06)["paused"] is True
+
+
+def test_play_item_jumps_and_continues_from_there(tmp_path):
+    player, _ = make_player(tmp_path)
+    player.tick(0.0)
+    player.set_live({"colors": [ORANGE]}, now_t=0.01)
+    player.play_item(1, now_t=0.02)
+    assert pixels(player.tick(0.02))[0] == PURPLE  # override dropped, item 1 (solid) playing
+    assert player.playlist(0.02)["current"] == 1
+    assert pixels(player.tick(1.1))[0] == (1, 1, 1)  # then wraps to item 0
+    with pytest.raises(ValueError):
+        player.play_item(5)
+
+
+def test_api_playlist_and_play(api):
+    call, player, _ = api
+    player.tick(0.0)
+    code, pl = call("/api/playlist")
+    assert code == 200 and len(pl["items"]) == 2
+    assert call("/api/play", {"index": 1})[0] == 403  # admin only
+    assert call("/api/play", {"index": 1}, token="sekret")[0] == 200
+    assert call("/api/playlist")[1]["current"] == 1
+    assert call("/api/play", {"index": 9}, token="sekret")[0] == 400

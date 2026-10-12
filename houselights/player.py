@@ -85,6 +85,7 @@ class Player:
         self._order = list(range(len(config.playlist)))
         self._pos = -1
         self._current: Source | None = None
+        self._current_index: int | None = None  # playlist index of _current
         self._override: Source | None = None
         self._override_until = 0.0
         self._off = False
@@ -129,6 +130,45 @@ class Player:
     def skip(self, now_t: float | None = None) -> None:
         with self._lock:
             self._advance(time.perf_counter() if now_t is None else now_t)
+
+    def play_item(self, index: int, now_t: float | None = None) -> None:
+        """Jump to playlist item `index` now (drops any live override). The playlist carries on from there."""
+        if not 0 <= index < len(self.config.playlist):
+            raise ValueError(f"No playlist item {index}")
+        now_t = time.perf_counter() if now_t is None else now_t
+        with self._lock:
+            self._override = None
+            self._off = False
+            self._current = self._make_source(self.config.playlist[index])
+            self._current.t0 = now_t
+            self._current_index = index
+            if index in self._order:
+                self._pos = self._order.index(index)
+
+    def playlist(self, now_t: float | None = None) -> dict:
+        """The playlist with what's playing, how far in, and what's next."""
+        now_t = time.perf_counter() if now_t is None else now_t
+        with self._lock:
+            items = []
+            for i, item in enumerate(self.config.playlist):
+                entry = {"index": i, "name": item.describe(), "type": item.type, "seconds": self._duration(item)}
+                if item.type == "effect":
+                    entry["effect"] = item.effect
+                    entry["colors"] = ["#%02X%02X%02X" % c for c in item.params["colors"]]
+                items.append(entry)
+            current = self._current_index if self._current is not None else None
+            if self._pos + 1 < len(self._order):
+                up_next = self._order[self._pos + 1]
+            else:
+                up_next = None if self.config.shuffle else (self._order[0] if self._order else None)
+            return {
+                "items": items,
+                "current": current,
+                "position": round(now_t - self._current.t0, 1) if current is not None else None,
+                "paused": current is not None and (self._override is not None or self._off),
+                "next": up_next if current is not None else None,
+                "shuffle": self.config.shuffle,
+            }
 
     def in_window(self) -> bool:
         return self.config.in_window(self.clock())
@@ -176,6 +216,7 @@ class Player:
 
             if self._off or not in_window or not self.config.playlist:
                 self._current = None
+                self._current_index = None
                 return self._blackout(now_t)
 
             if self._current is None:
@@ -229,7 +270,8 @@ class Player:
                 random.shuffle(self._order)
                 if len(self._order) > 1 and self._order[0] == last:
                     self._order.append(self._order.pop(0))
-        item = self.config.playlist[self._order[self._pos]]
+        self._current_index = self._order[self._pos]
+        item = self.config.playlist[self._current_index]
         self._current = self._make_source(item)
         self._current.t0 = now_t
 
@@ -237,6 +279,11 @@ class Player:
         if item.type == "fseq":
             return FseqSource(item.describe(), self._load(item), item.loops)
         return EffectSource(item.describe(), item.effect, item.params, self.models, item.seconds)
+
+    def _duration(self, item: Item) -> float:
+        if item.type == "fseq":
+            return round(self._load(item).duration_ms * item.loops / 1000, 1)
+        return item.seconds
 
     def _load(self, item: Item) -> FSEQ:
         key = str(item.file)

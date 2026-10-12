@@ -27,7 +27,7 @@
   .preset span { display: block; padding: 8px 10px; font-weight: 600; background: rgba(0,0,0,.55); }
   .preset.active { border-color: var(--text); }
   .swatches { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .swatch { position: relative; width: 64px; height: 64px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; }
+  .swatch { position: relative; width: 56px; height: 56px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; }
   .swatch input { position: absolute; inset: -10px; width: calc(100% + 20px); height: calc(100% + 20px); border: 0; padding: 0; cursor: pointer; background: none; }
   .round { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 26px; line-height: 1; cursor: pointer; }
   .round:disabled { opacity: .3; }
@@ -94,7 +94,7 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const MAX_COLORS = 6;
+const MAX_COLORS = 16;
 const state = { effect: "chase", colors: ["#400080", "#FF3000"], speed: 40, band: 8, brightness: 100 };
 let presets = {}, dirty = false, sendTimer = null, lastEdit = 0;
 

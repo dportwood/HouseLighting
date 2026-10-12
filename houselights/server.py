@@ -26,6 +26,7 @@ from .player import Player
 
 WEB_DIR = Path(__file__).parent / "web"
 MAX_BODY = 16 * 1024
+MAX_COLORS = 16
 
 
 def make_server(player: Player, host: str, port: int) -> ThreadingHTTPServer:
@@ -144,8 +145,8 @@ def _live_params(body: dict) -> dict:
         params["effect"] = str(body["effect"])
     if "colors" in body:
         colors = body["colors"]
-        if not isinstance(colors, list) or not 1 <= len(colors) <= 8:
-            raise ValueError("colors must be a list of 1-8 '#RRGGBB' strings")
+        if not isinstance(colors, list) or not 1 <= len(colors) <= MAX_COLORS:
+            raise ValueError(f"colors must be a list of 1-{MAX_COLORS} '#RRGGBB' strings")
         params["colors"] = [parse_color(str(c)) for c in colors]
     if "speed" in body:
         params["speed"] = min(100.0, max(1.0, float(body["speed"])))

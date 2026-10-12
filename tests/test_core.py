@@ -130,3 +130,19 @@ def test_strobe_flashes_few_pixels_and_changes_each_slot():
     assert (a == b).all()  # same flash slot -> same pattern
     effects.strobe(b, [model], colors, t=0.06, density=0.05)
     assert not (a == b).all()  # next slot -> new flashes
+
+
+def test_led_rainbow_is_distinct_saturated_and_starts_red():
+    from houselights.colors import led_rainbow, led_value
+
+    colors = led_rainbow(16)
+    assert len(set(colors)) == 16
+    assert colors[0] == (255, 0, 0)
+    for c in colors:
+        assert max(c) == 255 and min(c) <= 20  # full brightness, saturated
+    # the config's Rainbow theme matches the generator
+    import tomllib
+    with open("config.example.toml", "rb") as f:
+        preset = tomllib.load(f)["presets"]["Rainbow"]
+    assert [effects.parse_color(h) for h in preset] == colors
+    assert led_value((255, 128, 0)) == (255, 55, 0)  # screen orange -> LED orange

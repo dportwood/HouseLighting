@@ -6,7 +6,7 @@ import pytest
 from houselights import effects
 from houselights.ddp import build_packets
 from houselights.fseq import read_fseq
-from houselights.layout import load_layout
+from houselights.layout import Model, load_layout
 
 NETWORKS = """<?xml version="1.0" encoding="UTF-8"?>
 <Networks>
@@ -115,3 +115,18 @@ def test_locate_lights_blocks_from_first_pixel(layout):
     assert not px[:4].any()
     assert tuple(px[4]) == effects.LOCATE_COLORS[0]
     assert tuple(px[9]) == effects.LOCATE_COLORS[1]
+
+
+def test_strobe_flashes_few_pixels_and_changes_each_slot():
+    model = Model("Big", "Single Line", "A", 1, 1000)
+    colors = [(255, 255, 255), (255, 48, 0)]
+    a = np.zeros(3000, dtype=np.uint8)
+    b = np.zeros(3000, dtype=np.uint8)
+    effects.strobe(a, [model], colors, t=0.0, density=0.05)
+    lit = a.reshape(-1, 3).any(axis=1)
+    assert 20 < lit.sum() < 90  # ~5% of 1000
+    assert {tuple(p) for p in a.reshape(-1, 3)[lit]} <= set(colors)
+    effects.strobe(b, [model], colors, t=0.01, density=0.05)
+    assert (a == b).all()  # same flash slot -> same pattern
+    effects.strobe(b, [model], colors, t=0.06, density=0.05)
+    assert not (a == b).all()  # next slot -> new flashes

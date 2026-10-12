@@ -70,6 +70,25 @@ def twinkle(frame: np.ndarray, models: list[Model], colors: list[tuple[int, int,
         px[:] = (palette[pick] * (0.15 + 0.85 * level)[:, None]).astype(np.uint8)
 
 
+STROBE_FLASH_SECONDS = 0.05  # one frame at 20 fps: a single sharp flash
+
+
+def strobe(frame: np.ndarray, models: list[Model], colors: list[tuple[int, int, int]], t: float, density: float) -> None:
+    """Random pixels flash for one instant on a black background, like xLights' Strobe effect.
+
+    `density` is the fraction of pixels lit in each flash slot. Picks depend only on
+    (model, slot), so the pattern is reproducible and frame-rate independent.
+    """
+    palette = np.array(colors, dtype=np.uint8)
+    slot = int(t / STROBE_FLASH_SECONDS)
+    for m in models:
+        px = frame[m.start - 1 : m.end].reshape(-1, 3)
+        px[:] = 0
+        rng = np.random.default_rng((m.start, slot))
+        lit = rng.random(m.nodes) < density
+        px[lit] = palette[rng.integers(0, len(palette), int(lit.sum()))]
+
+
 def _speed(params: dict) -> float:
     return min(100.0, max(1.0, float(params.get("speed", 40))))
 
@@ -78,6 +97,7 @@ EFFECTS = {
     "chase": lambda f, ms, p, t: chase(f, ms, p["colors"], t, int(p.get("band", 8)), _speed(p) / 2),
     "fade": lambda f, ms, p, t: fade(f, ms, p["colors"], t, 200 / _speed(p)),
     "twinkle": lambda f, ms, p, t: twinkle(f, ms, p["colors"], t, _speed(p) / 80),
+    "strobe": lambda f, ms, p, t: strobe(f, ms, p["colors"], t, _speed(p) / 1000),
     "solid": lambda f, ms, p, t: solid(f, ms, p["colors"][0]),
 }
 

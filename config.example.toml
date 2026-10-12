@@ -16,25 +16,17 @@ days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 start = "16:50"
 end = "23:15"
 
-# Playlist: rendered xLights sequences and/or live effects (chase, fade, twinkle, solid).
-[[playlist]]
-type = "fseq"
-file = "Halloween 2024 - 2.fseq"
-
-[[playlist]]
-type = "fseq"
-file = "Halloween 2024.fseq"
-
+# Playlist: rendered xLights sequences and/or live effects (chase, fade, twinkle, strobe, solid).
 [[playlist]]
 type = "fseq"
 file = "Halloween Chase.fseq"
 
 [[playlist]]
 type = "effect"
-effect = "twinkle"
-seconds = 60
-colors = ["#400080", "#FF3000"]
-speed = 40
+effect = "strobe"
+seconds = 30
+colors = ["#FFFFFF", "#FF3000", "#400080"]
+speed = 40               # strobe: speed/10 = percent of pixels in each flash
 
 # What the tablet starts from.
 [live]

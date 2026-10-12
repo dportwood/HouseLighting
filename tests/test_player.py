@@ -191,6 +191,6 @@ def test_api_live_refused_outside_window(api):
 def test_api_page_options_preview(api):
     call, player, _ = api
     player.tick(0.0)
-    assert call("/api/options")[1]["effects"] == ["chase", "fade", "twinkle", "solid"]
+    assert call("/api/options")[1]["effects"] == ["chase", "fade", "twinkle", "strobe", "solid"]
     preview = call("/api/preview")[1]["models"]
     assert preview == [{"name": "Line", "controller": "A", "rgb": "01" * 12}]

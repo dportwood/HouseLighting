@@ -1,0 +1,54 @@
+# Copy to config.toml and adjust. Times are local (24h).
+
+show_dir = 'Z:\xlights'          # xLights show folder: layout + .fseq files
+fps = 20
+skip_controllers = ["FPP-Housenew"]   # the house Pi (.64) is broken
+
+http_port = 8080
+override_minutes = 30            # tablet changes revert to the show after this long
+allow_live_outside_window = false
+# api_token = "change-me"        # when set, Off/Skip need it (?token=... or X-Api-Token)
+
+shuffle = true
+
+[[windows]]
+days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+start = "16:50"
+end = "23:15"
+
+# Playlist: rendered xLights sequences and/or live effects (chase, fade, twinkle, solid).
+[[playlist]]
+type = "fseq"
+file = "Halloween 2024 - 2.fseq"
+
+[[playlist]]
+type = "fseq"
+file = "Halloween 2024.fseq"
+
+[[playlist]]
+type = "fseq"
+file = "Halloween Chase.fseq"
+
+[[playlist]]
+type = "effect"
+effect = "twinkle"
+seconds = 60
+colors = ["#400080", "#FF3000"]
+speed = 40
+
+# What the tablet starts from.
+[live]
+effect = "chase"
+colors = ["#400080", "#FF3000"]
+speed = 40
+band = 8
+
+# Theme buttons on the tablet.
+[presets]
+Halloween = ["#400080", "#FF3000"]
+"Pumpkin" = ["#FF3000", "#FF7A00", "#801500"]
+"Witch" = ["#400080", "#00C000"]
+Christmas = ["#FF0000", "#00A000"]
+"Candy Cane" = ["#FF0000", "#FFFFFF"]
+"Warm White" = ["#FFB060"]
+"Red White Blue" = ["#FF0000", "#FFFFFF", "#0030FF"]

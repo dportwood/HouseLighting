@@ -8,3 +8,4 @@ dist/
 # Show data lives in the xLights folder, not here
 *.fseq
 captures/
+config.toml

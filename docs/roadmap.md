@@ -6,13 +6,21 @@
 * Live chase and `.fseq` playback sent to both remotes (.45, .239) in remote
   mode; packets received with no errors after fixing per-packet sequence numbers.
 
-## 2. Player MVP
+## 2. Player MVP — in progress
 
-* Long-running service: scheduler (replace xSchedule's nightly 16:50–23:15),
-  playlist of `.fseq` files and live effects.
-* Steady frame timing on Windows (or move to a Pi 4/5 that replaces the dead .64).
-* Live parameter changes (palette, speed, effect) through an HTTP/WebSocket API.
-* Optionally still send FPP MultiSync so remotes can play local `.fseq` copies.
+Done:
+* `serve`: schedule windows (incl. past midnight), shuffled playlist of `.fseq`
+  files and live effects, 20 fps frame loop.
+* Live effects: chase, fade, twinkle, solid; brightness scaling.
+* HTTP API + tablet page (presets, colors, effect, speed, band, brightness,
+  preview); tablet changes expire back to the show; optional admin token.
+* Tested in dry-run (page at phone and tablet sizes; steady 20 fps on fseq playback).
+
+Still to do:
+* Run `serve` against the real lights (needs xSchedule stopped) and watch a full night.
+* Start on boot (Windows Task Scheduler or a Pi 4/5 replacing the dead .64).
+* Cut over from xSchedule.
+* Optionally send FPP MultiSync so remotes can play local `.fseq` copies.
 
 ## 3. Camera pixel mapping and image overlay
 

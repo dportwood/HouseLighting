@@ -33,3 +33,20 @@ class Output:
     def close(self) -> None:
         for _, sender in self.targets:
             sender.close()
+
+
+class NullOutput:
+    """Stands in for Output when testing without lights; remembers the last frame."""
+
+    targets: list = []
+
+    def __init__(self):
+        self.frames = 0
+        self.last: bytes | None = None
+
+    def send(self, frame) -> None:
+        self.frames += 1
+        self.last = bytes(frame)
+
+    def close(self) -> None:
+        pass

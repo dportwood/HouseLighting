@@ -17,7 +17,30 @@ pip install -e .[dev]
 The xLights show folder defaults to `Z:\xlights`; override with `--show-dir`
 or the `HOUSELIGHTS_SHOW_DIR` environment variable.
 
-## Usage
+## Running the show (phase 2)
+
+```bash
+cp config.example.toml config.toml   # then edit schedule, playlist, presets
+python -m houselights serve --config config.toml
+```
+
+* Plays the playlist (rendered `.fseq` files and live effects) inside the
+  schedule windows; outside them it sends black for a second, then goes quiet.
+* Control page for the tablet/phone: `http://<this PC>:8080/`. Theme presets,
+  colors, effect (chase / fade / twinkle / solid), speed, band size, brightness,
+  and a live preview. Changes take over immediately and revert to the show after
+  `override_minutes`; "Back to the show" reverts now.
+* Outside the show window the page refuses changes (unless
+  `allow_live_outside_window = true`).
+* Set `api_token` to require a token for the admin buttons (Off, Next).
+* `--dry-run` runs everything, including the page, without sending to the lights.
+* Windows will ask to allow Python through the firewall the first time; allow it
+  on private networks so the tablet can reach the page.
+
+**Only one player at a time:** stop xSchedule (or remove its schedule) before
+running `serve` against the real lights.
+
+## One-off commands
 
 ```bash
 python -m houselights info
@@ -29,7 +52,7 @@ python -m houselights --skip FPP-Housenew play "Z:/xlights/Halloween Chase.fseq"
 `--only` / `--skip` take a controller name or IP and can be repeated.
 The house controller (`FPP-Housenew`, 172.16.17.64) is currently broken, so skip it.
 
-Don't run this while xSchedule is playing the scheduled show (16:50–23:15) –
+Don't run these while xSchedule is playing the scheduled show (16:50–23:15) –
 the remotes would get both their synced local sequence and our DDP frames.
 
 ## How it talks to the controllers

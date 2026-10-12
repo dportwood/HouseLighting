@@ -5,6 +5,7 @@
   chase  --colors A,B,...    live chase along every string
   play   FILE.fseq           play a rendered xLights sequence directly over DDP
   locate --model NAME        light the end of one string in color blocks to find a dead pixel
+  serve  --config FILE       run the show: schedule, playlist and the tablet web page
 """
 
 from __future__ import annotations
@@ -54,7 +55,14 @@ def main(argv: list[str] | None = None) -> None:
     lo.add_argument("--block", type=int, default=5, help="pixels per color block")
     lo.add_argument("--seconds", type=float, default=60.0)
 
+    sv = sub.add_parser("serve")
+    sv.add_argument("--config", default="config.toml")
+    sv.add_argument("--dry-run", action="store_true", help="run everything but don't send to the controllers")
+
     args = p.parse_args(argv)
+    if args.cmd == "serve":
+        _serve(args)
+        return
     layout = load_layout(args.show_dir)
 
     if args.cmd == "info":
@@ -119,6 +127,36 @@ def _play(out: Output, frame: np.ndarray, path: Path, loops: int) -> None:
             frame[:count] = np.frombuffer(seq.frame(i)[:count], dtype=np.uint8)
             out.send(frame)
             time.sleep(max(0.0, start + (i + 1) * period - time.perf_counter()))
+
+
+def _serve(args) -> None:
+    from .config import load_config
+    from .output import NullOutput
+    from .player import Player
+    from .server import make_server, serve_in_thread
+
+    cfg = load_config(args.config)
+    layout = load_layout(cfg.show_dir)
+    out = NullOutput() if args.dry_run else Output(layout, only=args.only, skip=(args.skip or []) + cfg.skip_controllers)
+    if args.dry_run:
+        print("Dry run: nothing is sent to the controllers")
+    else:
+        print("Sending to: " + ", ".join(f"{c.name} ({c.ip})" for c, _ in out.targets))
+    player = Player(cfg, layout, out)
+    print(f"Loading {sum(i.type == 'fseq' for i in cfg.playlist)} sequence(s)...")
+    player.preload()
+    server = make_server(player, cfg.http_host, cfg.http_port)
+    serve_in_thread(server)
+    print(f"Control page: http://localhost:{cfg.http_port}/  (Ctrl+C to stop)")
+    try:
+        player.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        player.stop()
+        server.shutdown()
+        out.send(np.zeros(layout.total_channels, dtype=np.uint8))
+        out.close()
 
 
 def _info(layout) -> None:

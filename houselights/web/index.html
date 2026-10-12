@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#121016">
+<title>House Lights</title>
+<style>
+  :root {
+    --bg: #121016; --panel: #1c1922; --line: #2c2834; --text: #f1edf6; --muted: #a59fb0;
+    --accent: #ff7a1a; --accent-ink: #1a0d02; --ok: #5bd18b; --warn: #f5b942;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px 16px 40px; display: grid; gap: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; text-align: right; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.show { background: var(--ok); } .dot.live { background: var(--accent); } .dot.off, .dot.idle { background: #555; }
+  .presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .preset { border: 2px solid transparent; border-radius: 12px; padding: 0; overflow: hidden; background: #000; color: #fff; cursor: pointer; text-align: left; }
+  .preset .bar { height: 44px; }
+  .preset span { display: block; padding: 8px 10px; font-weight: 600; background: rgba(0,0,0,.55); }
+  .preset.active { border-color: var(--text); }
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .swatch { position: relative; width: 64px; height: 64px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; }
+  .swatch input { position: absolute; inset: -10px; width: calc(100% + 20px); height: calc(100% + 20px); border: 0; padding: 0; cursor: pointer; background: none; }
+  .round { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 26px; line-height: 1; cursor: pointer; }
+  .round:disabled { opacity: .3; }
+  .seg { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .seg button { min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer; text-transform: capitalize; }
+  .seg button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  label.slider { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 10px; min-height: 48px; }
+  label.slider output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; height: 36px; accent-color: var(--accent); }
+  .big { width: 100%; min-height: 56px; border-radius: 12px; border: 0; background: var(--text); color: var(--bg); font-size: 18px; font-weight: 700; cursor: pointer; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  .ghost { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); font-weight: 600; cursor: pointer; }
+  canvas { width: 100%; display: block; border-radius: 10px; background: #000; }
+  .msg { min-height: 20px; color: var(--warn); font-size: 14px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>House Lights</h1>
+    <div class="status"><span id="statusText">Connecting…</span><span class="dot" id="statusDot"></span></div>
+  </header>
+
+  <section>
+    <h2>Themes</h2>
+    <div class="presets" id="presets"></div>
+  </section>
+
+  <section>
+    <h2>Colors</h2>
+    <div class="swatches" id="swatches">
+      <button class="round" id="removeColor" aria-label="Remove a color">−</button>
+      <button class="round" id="addColor" aria-label="Add a color">+</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Effect</h2>
+    <div class="seg" id="effects"></div>
+  </section>
+
+  <section>
+    <label class="slider">Speed <input type="range" id="speed" min="1" max="100"><output id="speedOut"></output></label>
+    <label class="slider" id="bandRow">Band size <input type="range" id="band" min="1" max="40"><output id="bandOut"></output></label>
+    <label class="slider">Brightness <input type="range" id="brightness" min="5" max="100"><output id="brightnessOut"></output></label>
+  </section>
+
+  <button class="big" id="resume">Back to the show</button>
+  <div class="msg" id="msg" role="status"></div>
+
+  <section>
+    <h2>Preview</h2>
+    <canvas id="preview" height="10"></canvas>
+  </section>
+
+  <section id="admin" class="hidden">
+    <h2>Admin</h2>
+    <div class="row">
+      <button class="ghost" id="skip">Next in playlist</button>
+      <button class="ghost" id="off">Lights off</button>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const MAX_COLORS = 6;
+const state = { effect: "chase", colors: ["#400080", "#FF3000"], speed: 40, band: 8, brightness: 100 };
+let presets = {}, dirty = false, sendTimer = null, lastEdit = 0;
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+function say(text) { $("msg").textContent = text || ""; }
+
+function renderSwatches() {
+  const box = $("swatches");
+  box.querySelectorAll(".swatch").forEach(n => n.remove());
+  state.colors.forEach((c, i) => {
+    const wrap = document.createElement("div");
+    wrap.className = "swatch";
+    const input = document.createElement("input");
+    input.type = "color";
+    input.value = c.toLowerCase();
+    input.setAttribute("aria-label", `Color ${i + 1}`);
+    input.addEventListener("input", () => { state.colors[i] = input.value.toUpperCase(); edited(); });
+    wrap.append(input);
+    box.insertBefore(wrap, $("removeColor"));
+  });
+  $("removeColor").disabled = state.colors.length <= 1;
+  $("addColor").disabled = state.colors.length >= MAX_COLORS;
+  markPreset();
+}
+
+function markPreset() {
+  const key = state.colors.join(",");
+  document.querySelectorAll(".preset").forEach(b => b.classList.toggle("active", b.dataset.colors === key));
+}
+
+function renderEffects(list) {
+  const box = $("effects");
+  box.innerHTML = "";
+  list.forEach(name => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.dataset.effect = name;
+    b.addEventListener("click", () => { state.effect = name; markEffect(); edited(); });
+    box.append(b);
+  });
+  markEffect();
+}
+
+function markEffect() {
+  document.querySelectorAll("#effects button").forEach(b => b.classList.toggle("active", b.dataset.effect === state.effect));
+  $("bandRow").classList.toggle("hidden", state.effect !== "chase");
+}
+
+function renderPresets() {
+  const box = $("presets");
+  box.innerHTML = "";
+  Object.entries(presets).forEach(([name, colors]) => {
+    const b = document.createElement("button");
+    b.className = "preset";
+    b.dataset.colors = colors.join(",");
+    const stops = colors.length === 1 ? `${colors[0]},${colors[0]}` : colors.join(",");
+    b.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops})"></div><span></span>`;
+    b.querySelector("span").textContent = name;
+    b.addEventListener("click", () => { state.colors = [...colors]; renderSwatches(); edited(); });
+    box.append(b);
+  });
+  markPreset();
+}
+
+function syncSliders() {
+  for (const k of ["speed", "band", "brightness"]) { $(k).value = state[k]; $(k + "Out").textContent = Math.round(state[k]); }
+}
+
+function edited() {
+  dirty = true;
+  lastEdit = Date.now();
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(send, 150);
+}
+
+async function send() {
+  dirty = false;
+  try {
+    const s = await api("/api/live", { ...state, brightness: state.brightness / 100 });
+    showStatus(s);
+    say("");
+  } catch (e) { say(e.message); }
+}
+
+function showStatus(s) {
+  const labels = { show: "Show", live: "Live", off: "Off", idle: "Show is off" };
+  let text = labels[s.mode] || s.mode;
+  if (s.playing) text += " · " + s.playing;
+  if (s.mode === "live" && s.override_seconds_left != null) text += ` · back to show in ${Math.ceil(s.override_seconds_left / 60)} min`;
+  $("statusText").textContent = text;
+  $("statusDot").className = "dot " + s.mode;
+  $("resume").classList.toggle("hidden", s.mode !== "live" && s.mode !== "off");
+  // Take settings from the server unless the user is mid-edit on this device.
+  if (!dirty && Date.now() - lastEdit > 3000 && s.live) {
+    Object.assign(state, { effect: s.live.effect, colors: s.live.colors, speed: s.live.speed, band: s.live.band, brightness: s.brightness * 100 });
+    renderSwatches(); markEffect(); syncSliders();
+  }
+}
+
+async function poll() {
+  try { showStatus(await api("/api/status")); } catch (e) { $("statusText").textContent = "Can't reach the player"; $("statusDot").className = "dot"; }
+}
+
+// Preview: one row per model, pixels scaled to the canvas width.
+async function drawPreview() {
+  if (document.hidden) return;
+  let data;
+  try { data = await api("/api/preview"); } catch { return; }
+  const cv = $("preview"), ctx = cv.getContext("2d");
+  const rowH = 10, gap = 4;
+  const w = cv.clientWidth * devicePixelRatio;
+  cv.width = w;
+  cv.height = (data.models.length * (rowH + gap)) * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const cw = cv.clientWidth;
+  data.models.forEach((m, row) => {
+    const n = m.rgb.length / 6;
+    const px = cw / n;
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = "#" + m.rgb.substr(i * 6, 6);
+      ctx.fillRect(i * px, row * (rowH + gap), Math.max(1, px - (px > 3 ? 1 : 0)), rowH);
+    }
+  });
+}
+
+$("addColor").addEventListener("click", () => { state.colors.push(state.colors[state.colors.length - 1]); renderSwatches(); edited(); });
+$("removeColor").addEventListener("click", () => { state.colors.pop(); renderSwatches(); edited(); });
+for (const k of ["speed", "band", "brightness"]) {
+  $(k).addEventListener("input", () => { state[k] = Number($(k).value); $(k + "Out").textContent = state[k]; edited(); });
+}
+$("resume").addEventListener("click", async () => { try { showStatus(await api("/api/resume", {})); lastEdit = 0; } catch (e) { say(e.message); } });
+$("skip").addEventListener("click", async () => { try { showStatus(await api("/api/skip", {})); } catch (e) { say(e.message); } });
+$("off").addEventListener("click", async () => { try { showStatus(await api("/api/off", {})); } catch (e) { say(e.message); } });
+
+(async function init() {
+  try {
+    const opts = await api("/api/options");
+    presets = opts.presets;
+    renderEffects(opts.effects);
+    renderPresets();
+    $("admin").classList.toggle("hidden", !opts.admin);
+  } catch (e) { say(e.message); }
+  renderSwatches(); syncSliders();
+  await poll();
+  setInterval(poll, 2000);
+  setInterval(drawPreview, 250);
+})();
+</script>
+</body>
+</html>

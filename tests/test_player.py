@@ -344,3 +344,19 @@ def test_api_shutdown_from_localhost_stops_player(api):
     call, player, _ = api
     assert call("/api/shutdown", {})[0] == 200
     assert player._stop.is_set()
+
+
+def test_server_ignores_client_disconnects_but_logs_real_errors(tmp_path, capsys):
+    player, _ = make_player(tmp_path)
+    server = make_server(player, "127.0.0.1", 0)
+    try:
+        for exc, logged in ((ConnectionResetError(10054, "reset"), False), (ConnectionAbortedError(), False),
+                            (BrokenPipeError(), False), (RuntimeError("boom"), True)):
+            try:
+                raise exc
+            except Exception:
+                server.handle_error(None, ("127.0.0.1", 1234))
+            out = capsys.readouterr().out
+            assert ("boom" in out) is logged and ("reset" not in out)
+    finally:
+        server.server_close()

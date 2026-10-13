@@ -27,7 +27,10 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
+import traceback
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -46,6 +49,13 @@ class _Server(ThreadingHTTPServer):
     # On Windows SO_REUSEADDR lets a second process bind the same port, which would
     # mean two players fighting over the lights. Fail loudly instead.
     allow_reuse_address = os.name != "nt"
+
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            return  # a browser/tablet went away mid-request (reload, sleep, closed tab); nothing to do
+        print(f"{datetime.now():%Y-%m-%d %H:%M:%S} error handling a request from {client_address[0]}:\n"
+              f"{traceback.format_exc()}", flush=True)
 
 
 def make_server(player: Player, host: str, port: int) -> ThreadingHTTPServer:

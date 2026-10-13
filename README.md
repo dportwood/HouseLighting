@@ -38,7 +38,28 @@ python -m houselights serve --config config.toml
   on private networks so the tablet can reach the page.
 
 **Only one player at a time:** stop xSchedule (or remove its schedule) before
-running `serve` against the real lights.
+running `serve` against the real lights. A second `serve` on the same port
+refuses to start.
+
+### Start automatically
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-startup-task.ps1
+```
+
+Registers the "HouseLights Player" scheduled task: starts 30 s after this user
+logs on, runs windowless, restarts after a failure, never times out. Output and
+errors go to `logs\player.log`. The PC must be logged in (set up auto-logon if
+it reboots unattended) and must not go to sleep during show hours.
+
+```powershell
+Stop-ScheduledTask  -TaskName "HouseLights Player"   # stop the show player
+Start-ScheduledTask -TaskName "HouseLights Player"   # start it (e.g. after editing config.toml)
+powershell -ExecutionPolicy Bypass -File scripts\install-startup-task.ps1 -Uninstall
+```
+
+Playlist items take an optional `name` and `brightness` (percent). The tablet's
+brightness slider only applies while its override is active.
 
 ## One-off commands
 

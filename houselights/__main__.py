@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 
-from . import effects
+from . import __version__, effects
 from .fseq import read_fseq
 from .layout import load_layout
 from .output import Output
@@ -58,6 +60,7 @@ def main(argv: list[str] | None = None) -> None:
     sv = sub.add_parser("serve")
     sv.add_argument("--config", default="config.toml")
     sv.add_argument("--dry-run", action="store_true", help="run everything but don't send to the controllers")
+    sv.add_argument("--log", help="append output and errors to this file (for running in the background)")
 
     args = p.parse_args(argv)
     if args.cmd == "serve":
@@ -135,6 +138,10 @@ def _serve(args) -> None:
     from .player import Player
     from .server import make_server, serve_in_thread
 
+    if args.log:
+        Path(args.log).parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8", buffering=1)
+    print(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} starting houselights {__version__} ---")
     cfg = load_config(args.config)
     layout = load_layout(cfg.show_dir)
     out = NullOutput() if args.dry_run else Output(layout, only=args.only, skip=(args.skip or []) + cfg.skip_controllers)

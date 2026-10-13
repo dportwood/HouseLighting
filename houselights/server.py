@@ -18,6 +18,7 @@ Admin (need `api_token` from the config, as X-Api-Token header or ?token=, when 
 from __future__ import annotations
 
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,9 +32,15 @@ MAX_BODY = 16 * 1024
 MAX_COLORS = 16
 
 
+class _Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second process bind the same port, which would
+    # mean two players fighting over the lights. Fail loudly instead.
+    allow_reuse_address = os.name != "nt"
+
+
 def make_server(player: Player, host: str, port: int) -> ThreadingHTTPServer:
     handler = type("Handler", (_Handler,), {"player": player})
-    server = ThreadingHTTPServer((host, port), handler)
+    server = _Server((host, port), handler)
     server.daemon_threads = True
     return server
 

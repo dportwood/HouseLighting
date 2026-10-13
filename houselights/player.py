@@ -15,6 +15,7 @@ from __future__ import annotations
 import random
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -31,6 +32,7 @@ class Source:
     def __init__(self, label: str):
         self.label = label
         self.t0 = 0.0
+        self.brightness = 1.0  # 0.05-1.0, applied to the output only
 
     def render(self, frame: np.ndarray, t: float) -> bool:
         """Draw the frame for `t` seconds since start. Return False once finished."""
@@ -77,7 +79,7 @@ class Player:
         self.visible_models = [m for m in layout.models if m.controller not in skipped]  # for the preview
         self.frame = np.zeros(layout.total_channels, dtype=np.uint8)
         self.sent = np.zeros_like(self.frame)  # last frame after brightness, for preview
-        self.brightness = 1.0
+        self.live_brightness = 1.0  # the tablet's slider; only applies to its override
         self.live_params = dict(config.live_defaults)
 
         self._lock = threading.RLock()
@@ -107,13 +109,14 @@ class Player:
             if not p["colors"]:
                 raise ValueError("At least one color is needed")
             if "brightness" in params:
-                self.brightness = min(1.0, max(0.05, float(params["brightness"])))
+                self.live_brightness = min(1.0, max(0.05, float(params["brightness"])))
             self.live_params = p
             if isinstance(self._override, EffectSource) and self._override.effect == p["effect"]:
                 self._override.params = p  # keep its clock so the motion doesn't jump
             else:
                 self._override = EffectSource(p["effect"], p["effect"], p, self.models, None)
                 self._override.t0 = now_t
+            self._override.brightness = self.live_brightness
             self._override_until = now_t + self.config.override_minutes * 60
             self._off = False
 
@@ -193,7 +196,7 @@ class Player:
                 "window_end": end.strftime("%H:%M") if end else None,
                 "override_seconds_left": max(0, round(self._override_until - now_t)) if self._override else None,
                 "live": {**self.live_params, "colors": ["#%02X%02X%02X" % c for c in self.live_params["colors"]]},
-                "brightness": self.brightness,
+                "brightness": self.live_brightness,
                 "fps": round(self._fps, 1),
                 "time": now.strftime("%H:%M:%S"),
             }
@@ -212,7 +215,7 @@ class Player:
                 self._override = None
             if self._override is not None:
                 self._override.render(self.frame, now_t - self._override.t0)
-                return self._output_frame()
+                return self._output_frame(self._override.brightness)
 
             if self._off or not in_window or not self.config.playlist:
                 self._current = None
@@ -224,19 +227,25 @@ class Player:
             if not self._current.render(self.frame, now_t - self._current.t0):
                 self._advance(now_t)
                 self._current.render(self.frame, 0.0)
-            return self._output_frame()
+            return self._output_frame(self._current.brightness)
 
     def run(self) -> None:
         period = 1.0 / self.config.fps
         start = time.perf_counter()
         n = 0
         window_start, window_frames = start, 0
+        last_error = 0.0
         while not self._stop.is_set():
             now_t = time.perf_counter()
-            data = self.tick(now_t)
-            if data is not None:
-                self.output.send(data)
-                window_frames += 1
+            try:
+                data = self.tick(now_t)
+                if data is not None:
+                    self.output.send(data)
+                    window_frames += 1
+            except Exception:  # keep the show going (e.g. a network hiccup); log at most every 10 s
+                if now_t - last_error > 10:
+                    last_error = now_t
+                    print(f"{datetime.now():%Y-%m-%d %H:%M:%S} frame error:\n{traceback.format_exc()}", flush=True)
             if now_t - window_start >= 2.0:
                 self._fps = window_frames / (now_t - window_start)
                 window_start, window_frames = now_t, 0
@@ -277,8 +286,11 @@ class Player:
 
     def _make_source(self, item: Item) -> Source:
         if item.type == "fseq":
-            return FseqSource(item.describe(), self._load(item), item.loops)
-        return EffectSource(item.describe(), item.effect, item.params, self.models, item.seconds)
+            source: Source = FseqSource(item.describe(), self._load(item), item.loops)
+        else:
+            source = EffectSource(item.describe(), item.effect, item.params, self.models, item.seconds)
+        source.brightness = item.brightness
+        return source
 
     def _duration(self, item: Item) -> float:
         if item.type == "fseq":
@@ -291,11 +303,11 @@ class Player:
             self._fseq_cache[key] = read_fseq(item.file)
         return self._fseq_cache[key]
 
-    def _output_frame(self) -> np.ndarray:
-        if self.brightness >= 0.999:
+    def _output_frame(self, brightness: float) -> np.ndarray:
+        if brightness >= 0.999:
             self.sent[:] = self.frame
         else:
-            np.multiply(self.frame, self.brightness, out=self.sent, casting="unsafe")
+            np.multiply(self.frame, brightness, out=self.sent, casting="unsafe")
         self._black_until = -1.0  # arm a blackout for when we stop
         return self.sent
 

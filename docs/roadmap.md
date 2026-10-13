@@ -17,9 +17,10 @@ Done:
 * Tested in dry-run (page at phone and tablet sizes; steady 20 fps on fseq playback).
 
 Still to do:
-* Run `serve` against the real lights (needs xSchedule stopped) and watch a full night.
-* Start on boot (Windows Task Scheduler or a Pi 4/5 replacing the dead .64).
-* Cut over from xSchedule.
+* ~~Run `serve` against the real lights~~ — ran the show from 2026-10-12 17:00.
+* ~~Start on boot~~ — logon scheduled task (`scripts/install-startup-task.ps1`).
+* ~~Cut over from xSchedule~~ — xSchedule no longer started; its config is untouched.
+* Consider a Pi 4/5 replacing the dead .64 so the show doesn't depend on this PC.
 * Optionally send FPP MultiSync so remotes can play local `.fseq` copies.
 
 ## 3. Camera pixel mapping and image overlay

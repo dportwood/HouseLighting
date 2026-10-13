@@ -1,6 +1,6 @@
 # Copy to config.toml and adjust. Times are local (24h).
 
-show_dir = 'Z:\xlights'          # xLights show folder: layout + .fseq files
+show_dir = '\\THEHUB\Media\xlights'   # xLights show folder (UNC path: mapped drives may not be up at logon)
 fps = 20
 skip_controllers = ["FPP-Housenew"]   # the house Pi (.64) is broken
 
@@ -27,6 +27,15 @@ effect = "strobe"
 seconds = 30
 colors = ["#FFFFFF", "#FF3000", "#400080"]
 speed = 40               # strobe: speed/10 = percent of pixels in each flash
+
+[[playlist]]
+name = "Witch Twinkle"
+type = "effect"
+effect = "twinkle"
+seconds = 120
+colors = ["#400080", "#00C000"]   # Witch theme
+speed = 100
+brightness = 100         # percent; playlist items each have their own
 
 # What the tablet starts from.
 [live]

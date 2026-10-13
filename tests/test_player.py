@@ -125,6 +125,19 @@ def test_brightness_scales_output_only(tmp_path):
     assert pixels(player.frame)[0] == (200, 100, 50)
 
 
+def test_item_brightness_and_name_and_live_brightness_only_while_live(tmp_path):
+    player, _ = make_player(tmp_path, playlist=[
+        {"type": "effect", "effect": "solid", "seconds": 10, "colors": ["#C86432"], "brightness": 50, "name": "Dim"},
+    ])
+    assert pixels(player.tick(0.0))[0] == (100, 50, 25)
+    assert player.status(0.0)["playing"] == "Dim"
+    player.set_live({"colors": [(200, 100, 50)], "brightness": 1.0}, now_t=1.0)
+    assert pixels(player.tick(1.0))[0] == (200, 100, 50)
+    player.set_live({"brightness": 0.1}, now_t=1.5)
+    player.resume()
+    assert pixels(player.tick(2.0))[0] == (100, 50, 25)  # tablet brightness doesn't leak into the show
+
+
 def test_off_until_resume(tmp_path):
     player, _ = make_player(tmp_path)
     player.tick(0.0)

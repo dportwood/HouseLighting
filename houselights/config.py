@@ -38,8 +38,12 @@ class Item:
     effect: str = ""
     seconds: float = 60.0
     params: dict = field(default_factory=dict)
+    brightness: float = 1.0  # 0.05-1.0
+    name: str = ""
 
     def describe(self) -> str:
+        if self.name:
+            return self.name
         if self.type == "fseq":
             return self.file.stem
         return self.effect.capitalize()
@@ -115,6 +119,13 @@ def _parse_window(w: dict) -> Window:
 
 
 def _parse_item(i: dict, show_dir: Path) -> Item:
+    item = _parse_item_kind(i, show_dir)
+    item.name = str(i.get("name", ""))
+    item.brightness = min(100.0, max(5.0, float(i.get("brightness", 100)))) / 100  # percent in the config
+    return item
+
+
+def _parse_item_kind(i: dict, show_dir: Path) -> Item:
     kind = i.get("type", "fseq")
     if kind == "fseq":
         path = Path(i["file"])

@@ -34,6 +34,16 @@
   .swatches { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .swatch { position: relative; width: 56px; height: 56px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; }
   .swatch input { position: absolute; inset: -10px; width: calc(100% + 20px); height: calc(100% + 20px); border: 0; padding: 0; cursor: pointer; background: none; }
+  .targets { display: flex; flex-wrap: wrap; gap: 8px; }
+  .target { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 6px 6px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-weight: 600; font-size: 15px; }
+  .target .sw { width: 30px; height: 30px; border-radius: 50%; flex: none; border: 1px solid rgba(255,255,255,.18); }
+  .target.custom .sw { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .target.off .sw { background: repeating-linear-gradient(45deg, #3a3640 0 4px, #15131a 4px 8px) !important; }
+  .target.off span:last-child { text-decoration: line-through; color: var(--muted); }
+  .target[aria-pressed="true"] { border-color: var(--text); background: var(--panel-2); }
+  .strings-box { margin-top: 10px; }
+  .strings-box summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--muted); font-weight: 600; }
+  .strings-box .targets { margin-top: 4px; }
   .round { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line); background: transparent; font-size: 26px; line-height: 1; }
   .seg { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
   .seg button { min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: transparent; font-size: 16px; font-weight: 600; text-transform: capitalize; }
@@ -112,6 +122,16 @@
   <!-- ===== Controls ===== -->
   <div class="tab" id="tab-controls" role="tabpanel">
     <section>
+      <h2>Which lights</h2>
+      <div class="targets" id="targets" role="group" aria-label="Which lights to change"></div>
+      <details id="stringsBox" class="strings-box">
+        <summary id="stringsSummary">Individual strings</summary>
+        <div class="targets" id="stringTargets" role="group" aria-label="Individual strings"></div>
+      </details>
+      <p class="help" id="targetHelp" style="margin-top:10px"></p>
+    </section>
+
+    <section>
       <h2>Themes</h2>
       <div class="presets" id="presets"></div>
     </section>
@@ -133,6 +153,13 @@
       <label class="slider">Speed <input type="range" id="speed" min="1" max="100"><output id="speedOut"></output></label>
       <label class="slider" id="bandRow">Band size <input type="range" id="band" min="1" max="40"><output id="bandOut"></output></label>
       <label class="slider">Brightness <input type="range" id="brightness" min="5" max="100"><output id="brightnessOut"></output></label>
+      <div class="row hidden" id="stringActions" style="margin-top:8px">
+        <button class="ghost" id="matchAll">Match all lights</button>
+        <button class="ghost" id="toggleOff">Turn off</button>
+      </div>
+      <div class="row hidden" id="allActions" style="margin-top:8px">
+        <button class="ghost" id="resetStrings">Reset every string to match</button>
+      </div>
     </section>
 
     <button class="big" id="resume">Back to the show</button>
@@ -231,7 +258,6 @@ const $ = id => document.getElementById(id);
 const MAX_COLORS = 16;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
-const state = { effect: "chase", colors: ["#400080", "#FF3000"], speed: 40, band: 8, brightness: 100 };
 let presets = {}, dirty = false, sendTimer = null, lastEdit = 0, isAdmin = false, tokenRequired = false, tab = "controls";
 
 // ---------- storage (per device; may be unavailable) ----------
@@ -310,38 +336,134 @@ TABS.forEach(t => $("tabBtn-" + t).addEventListener("click", () => showTab(t)));
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
 
 // ---------- controls ----------
+// `look` is what's on the lights: the overall look plus per-string settings
+// (`strings`: name -> {effect, colors, speed, band, brightness %, off}).
+// `target` says what the controls edit: all lights, one xLights group, or one string.
+const look = { effect: "chase", colors: ["#400080", "#FF3000"], speed: 40, band: 8, strings: {} };
+let brightness = 100;           // overall output brightness, percent
+let lightStrings = [], lightGroups = {};
+let target = { kind: "all" };
+
+const clone = s => ({ ...s, colors: [...s.colors] });
+const baseCopy = () => ({ effect: look.effect, colors: [...look.colors], speed: look.speed, band: look.band, brightness: 100, off: false });
+function members() {
+  if (target.kind === "string") return [target.name];
+  if (target.kind === "group") return lightGroups[target.name] || [];
+  return [];
+}
+function cur() {
+  if (target.kind === "all") return look;
+  return look.strings[members()[0]] || baseCopy();
+}
+// Apply `fn` to whatever the controls are pointed at. A group gets one shared copy, so it ends up uniform.
+function change(fn, rerender = true) {
+  if (target.kind === "all") fn(look);
+  else {
+    const next = clone(cur());
+    fn(next);
+    for (const n of members()) look.strings[n] = clone(next);
+  }
+  if (rerender) refreshControls();
+  renderTargets();
+  edited();
+}
+
+function targetColors(t) {
+  if (t.kind === "all") return look.colors;
+  const name = t.kind === "string" ? t.name : (lightGroups[t.name] || [])[0];
+  return (look.strings[name] || look).colors;
+}
+function isCustom(t) {
+  if (t.kind === "string") return !!look.strings[t.name];
+  if (t.kind === "group") return (lightGroups[t.name] || []).some(n => look.strings[n]);
+  return false;
+}
+function isOff(t) {
+  const names = t.kind === "string" ? [t.name] : t.kind === "group" ? (lightGroups[t.name] || []) : [];
+  return names.length > 0 && names.every(n => look.strings[n] && look.strings[n].off);
+}
+const sameTarget = (a, b) => a.kind === b.kind && a.name === b.name;
+
+let targetsKey = "";
+function renderTargets(force = false) {
+  const top = [{ kind: "all", label: "All lights" }, ...Object.keys(lightGroups).map(g => ({ kind: "group", name: g, label: g }))];
+  const singles = lightStrings.map(s => ({ kind: "string", name: s.name, label: s.name }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const key = JSON.stringify([look.colors, look.strings, target, top.length, singles.length]);
+  if (key === targetsKey && !force) return;
+  targetsKey = key;
+  const chip = t => {
+    const colors = targetColors(t);
+    const sw = el("span", { class: "sw" });
+    sw.style.background = colors.length === 1 ? colors[0] : `conic-gradient(${colors.join(",")},${colors[0]})`;
+    const b = el("button", {
+      class: "target" + (isCustom(t) ? " custom" : "") + (isOff(t) ? " off" : ""),
+      "aria-pressed": String(sameTarget(t, target)),
+      onclick: () => { target = { kind: t.kind, name: t.name }; refreshControls(); renderTargets(true); },
+    }, sw, el("span", { textContent: t.label }));
+    return b;
+  };
+  $("targets").replaceChildren(...top.map(chip));
+  $("stringTargets").replaceChildren(...singles.map(chip));
+  const customCount = singles.filter(isCustom).length;
+  $("stringsSummary").textContent = `Individual strings (${singles.length})${customCount ? ` · ${customCount} custom` : ""}`;
+  $("stringsBox").classList.toggle("hidden", !singles.length);
+  if (target.kind === "string") $("stringsBox").open = true;
+  const n = Object.keys(look.strings).length;
+  const help = target.kind === "all"
+    ? (n ? `Changes apply to every string except the ${n} with their own settings.` : "Changes apply to every string.")
+    : target.kind === "group"
+      ? `Changes apply to the ${members().length} strings in ${target.name}.`
+      : `Changes apply only to ${target.name}${lightStrings.find(s => s.name === target.name) ? ` (${lightStrings.find(s => s.name === target.name).pixels} lights)` : ""}.`;
+  $("targetHelp").textContent = help;
+}
+
+function refreshControls() {
+  const c = cur();
+  renderSwatches();
+  markEffect();
+  for (const k of ["speed", "band"]) { $(k).value = c[k]; $(k + "Out").textContent = Math.round(c[k]); }
+  const b = target.kind === "all" ? brightness : (c.brightness ?? 100);
+  $("brightness").value = b; $("brightnessOut").textContent = Math.round(b);
+  $("stringActions").classList.toggle("hidden", target.kind === "all");
+  $("allActions").classList.toggle("hidden", target.kind !== "all" || !Object.keys(look.strings).length);
+  $("toggleOff").textContent = isOff(target) ? "Turn on" : "Turn off";
+  $("matchAll").disabled = !isCustom(target);
+}
+
 function renderSwatches() {
-  const box = $("swatches");
+  const box = $("swatches"), colors = cur().colors;
   box.querySelectorAll(".swatch").forEach(n => n.remove());
-  state.colors.forEach((c, i) => {
+  colors.forEach((c, i) => {
     const input = el("input", { type: "color", value: c.toLowerCase(), "aria-label": `Color ${i + 1}` });
-    input.addEventListener("input", () => { state.colors[i] = input.value.toUpperCase(); edited(); });
+    input.addEventListener("input", () => change(s => { s.colors[i] = input.value.toUpperCase(); }, false));
     box.insertBefore(el("div", { class: "swatch" }, input), $("removeColor"));
   });
-  $("removeColor").disabled = state.colors.length <= 1;
-  $("addColor").disabled = state.colors.length >= MAX_COLORS;
+  $("removeColor").disabled = colors.length <= 1;
+  $("addColor").disabled = colors.length >= MAX_COLORS;
   markPreset();
 }
 
-function presetName() {
-  const key = state.colors.join(",");
+function presetName(colors = look.colors) {
+  const key = colors.join(",");
   return Object.keys(presets).find(n => presets[n].join(",") === key) || "";
 }
 function markPreset() {
-  const key = state.colors.join(",");
+  const key = cur().colors.join(",");
   document.querySelectorAll(".preset").forEach(b => b.classList.toggle("active", b.dataset.colors === key));
 }
 
 function renderEffects(list) {
   $("effects").replaceChildren(...list.map(name => el("button", {
     textContent: name, "data-effect": name,
-    onclick: () => { state.effect = name; markEffect(); edited(); },
+    onclick: () => change(s => { s.effect = name; }),
   })));
   markEffect();
 }
 function markEffect() {
-  document.querySelectorAll("#effects button").forEach(b => b.classList.toggle("active", b.dataset.effect === state.effect));
-  $("bandRow").classList.toggle("hidden", state.effect !== "chase");
+  const effect = cur().effect;
+  document.querySelectorAll("#effects button").forEach(b => b.classList.toggle("active", b.dataset.effect === effect));
+  $("bandRow").classList.toggle("hidden", effect !== "chase");
 }
 
 function renderPresets() {
@@ -351,14 +473,10 @@ function renderPresets() {
     bar.style.background = `linear-gradient(90deg,${stops})`;
     return el("button", {
       class: "preset", "data-colors": colors.join(","),
-      onclick: () => { state.colors = [...colors]; renderSwatches(); edited(); },
+      onclick: () => change(s => { s.colors = [...colors]; }),
     }, bar, el("span", { textContent: name }));
   }));
   markPreset();
-}
-
-function syncSliders() {
-  for (const k of ["speed", "band", "brightness"]) { $(k).value = state[k]; $(k + "Out").textContent = Math.round(state[k]); }
 }
 
 function edited() {
@@ -370,8 +488,13 @@ function edited() {
 
 async function send() {
   dirty = false;
-  try { showStatus(await api("/api/live", { ...state, brightness: state.brightness / 100 })); say(""); }
-  catch (e) { say(e.message); }
+  try {
+    showStatus(await api("/api/live", {
+      effect: look.effect, colors: look.colors, speed: look.speed, band: look.band,
+      strings: look.strings, brightness: brightness / 100,
+    }));
+    say("");
+  } catch (e) { say(e.message); }
 }
 
 function showStatus(s) {
@@ -382,9 +505,18 @@ function showStatus(s) {
   $("statusText").textContent = text;
   $("statusDot").className = "dot " + s.mode;
   $("resume").classList.toggle("hidden", s.mode !== "live" && s.mode !== "off");
+  // Pick up changes made elsewhere (another device), but never while this one is being used,
+  // and only redraw when something actually differs so a tap isn't lost to a redraw.
   if (!dirty && Date.now() - lastEdit > 3000 && s.live) {
-    Object.assign(state, { effect: s.live.effect, colors: s.live.colors, speed: s.live.speed, band: s.live.band, brightness: s.brightness * 100 });
-    renderSwatches(); markEffect(); syncSliders();
+    const incoming = { effect: s.live.effect, colors: s.live.colors, speed: s.live.speed, band: s.live.band, strings: s.live.strings || {} };
+    const same = JSON.stringify(incoming) === JSON.stringify({ effect: look.effect, colors: look.colors, speed: look.speed, band: look.band, strings: look.strings })
+      && Math.round(s.brightness * 100) === Math.round(brightness);
+    if (!same) {
+      Object.assign(look, incoming);
+      brightness = s.brightness * 100;
+      if (target.kind === "string" && !lightStrings.some(x => x.name === target.name)) target = { kind: "all" };
+      refreshControls(); renderTargets();
+    }
   }
 }
 
@@ -393,21 +525,34 @@ async function poll() {
   catch { $("statusText").textContent = "Can't reach the player"; $("statusDot").className = "dot"; }
 }
 
-$("addColor").addEventListener("click", () => { state.colors.push(state.colors[state.colors.length - 1]); renderSwatches(); edited(); });
-$("removeColor").addEventListener("click", () => { state.colors.pop(); renderSwatches(); edited(); });
-for (const k of ["speed", "band", "brightness"]) {
-  $(k).addEventListener("input", () => { state[k] = Number($(k).value); $(k + "Out").textContent = state[k]; edited(); });
+$("addColor").addEventListener("click", () => change(s => { s.colors.push(s.colors[s.colors.length - 1]); }));
+$("removeColor").addEventListener("click", () => change(s => { s.colors.pop(); }));
+for (const k of ["speed", "band"]) {
+  $(k).addEventListener("input", () => { const v = Number($(k).value); $(k + "Out").textContent = v; change(s => { s[k] = v; }, false); });
 }
+$("brightness").addEventListener("input", () => {
+  const v = Number($("brightness").value);
+  $("brightnessOut").textContent = v;
+  if (target.kind === "all") { brightness = v; edited(); }
+  else change(s => { s.brightness = v; }, false);
+});
+$("matchAll").addEventListener("click", () => {
+  for (const n of members()) delete look.strings[n];
+  refreshControls(); renderTargets(); edited();
+});
+$("toggleOff").addEventListener("click", () => { const off = !isOff(target); change(s => { s.off = off; }); });
+$("resetStrings").addEventListener("click", () => { look.strings = {}; refreshControls(); renderTargets(); edited(); });
 $("resume").addEventListener("click", async () => { try { showStatus(await api("/api/resume", {})); lastEdit = 0; } catch (e) { say(e.message); } });
 $("skip").addEventListener("click", async () => { try { showStatus(await api("/api/skip", {})); } catch (e) { say(e.message); } });
 $("off").addEventListener("click", async () => { try { showStatus(await api("/api/off", {})); } catch (e) { say(e.message); } });
 
 $("saveBtn").addEventListener("click", async () => {
-  const name = $("saveName").value.trim() || [presetName(), cap(state.effect)].filter(Boolean).join(" ");
+  const custom = Object.keys(look.strings).length;
+  const name = $("saveName").value.trim() || [presetName(), cap(look.effect), custom ? "mix" : ""].filter(Boolean).join(" ");
   try {
     await api("/api/playlist/add", {
-      name, effect: state.effect, colors: state.colors, speed: state.speed, band: state.band,
-      brightness: state.brightness, seconds: Number($("saveSeconds").value),
+      name, effect: look.effect, colors: look.colors, speed: look.speed, band: look.band, strings: look.strings,
+      brightness, seconds: Number($("saveSeconds").value),
     });
     $("saveName").value = "";
     plKey = "";
@@ -457,7 +602,9 @@ async function loadPlaylist() {
     const isCurrent = item.index === pl.current;
     const kind = item.type === "fseq" ? "Sequence" : cap(item.effect);
     const time = el("span", { textContent: `${kind} · ${itemLength(item)}` });
+    const nStrings = item.strings ? Object.keys(item.strings).length : 0;
     const sub = el("div", { class: "sub" }, time, item.colors ? dotsFor(item.colors) : null,
+      nStrings ? el("span", { textContent: `· ${nStrings} string${nStrings > 1 ? "s" : ""} custom` }) : null,
       item.brightness < 100 ? el("span", { textContent: `· ${item.brightness}%` }) : null);
     let right = el("span");
     if (isCurrent) right = el("span", { class: "badge playing", textContent: pl.paused ? "Paused" : "Playing" });
@@ -486,7 +633,7 @@ async function loadPlaylist() {
 
 // ---------- playlist (edit) ----------
 let plDraft = [];
-const EDIT_FIELDS = ["id", "name", "type", "file", "loops", "effect", "seconds", "colors", "speed", "band", "brightness"];
+const EDIT_FIELDS = ["id", "name", "type", "file", "loops", "effect", "seconds", "colors", "speed", "band", "brightness", "strings"];
 
 async function startPlaylistEdit() {
   const pl = await api("/api/playlist").catch(e => { say(e.message); return null; });
@@ -667,12 +814,14 @@ $("schedSave").addEventListener("click", async () => {
   try {
     const opts = await api("/api/options");
     presets = opts.presets;
+    lightStrings = opts.strings || [];
+    lightGroups = opts.groups || {};
     isAdmin = opts.admin;
     tokenRequired = opts.token_required;
     renderEffects(opts.effects);
     renderPresets();
   } catch (e) { say(e.message); }
-  renderSwatches(); syncSliders();
+  refreshControls(); renderTargets(true);
   showTab(location.hash.slice(1));
   await poll();
   setInterval(poll, 2000);

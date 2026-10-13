@@ -360,3 +360,65 @@ def test_server_ignores_client_disconnects_but_logs_real_errors(tmp_path, capsys
             assert ("boom" in out) is logged and ("reset" not in out)
     finally:
         server.server_close()
+
+
+# ---- per-string looks ----
+
+def two_string_layout() -> Layout:
+    return Layout(
+        [Controller("A", "10.0.0.1", "DDP", 1, 12)],
+        [Model("Left", "Single Line", "A", 1, 2), Model("Right", "Single Line", "A", 7, 2)],
+        {"Both": ["Left", "Right"], "Just left": ["Left"]},
+    )
+
+
+def test_strings_override_the_overall_look_per_string(tmp_path):
+    from houselights.config import parse_config
+
+    cfg = parse_config({"show_dir": str(tmp_path), "windows": [{"start": "00:00", "end": "23:59"}],
+                        "state_file": str(tmp_path / "show.json")})
+    player = Player(cfg, two_string_layout(), NullOutput(), clock=Clock("2026-10-12T18:00:00"))
+    player.set_live({"effect": "solid", "colors": [PURPLE],
+                     "strings": {"Right": {"effect": "solid", "colors": ["#C86432"], "brightness": 50}}}, now_t=0.0)
+    px = pixels(player.tick(0.0))
+    assert px[:2] == [PURPLE, PURPLE] and px[2:4] == [(100, 50, 25), (100, 50, 25)]
+    assert player.status(0.0)["live"]["strings"]["Right"]["colors"] == ["#C86432"]
+
+    player.set_live({"strings": {"Left": {"off": True, "colors": ["#FFFFFF"]}}}, now_t=1.0)  # replaces the strings
+    px = pixels(player.tick(1.0))
+    assert px[:2] == [(0, 0, 0), (0, 0, 0)] and px[2:4] == [PURPLE, PURPLE]
+
+
+def test_parse_strings_validates():
+    from houselights.config import parse_strings
+
+    ok = parse_strings({"Left": {"effect": "chase", "colors": ["#FF0000", "#00FF00"], "brightness": 300}}, {"Left"})
+    assert ok["Left"]["colors"] == [(255, 0, 0), (0, 255, 0)] and ok["Left"]["brightness"] == 100
+    for bad in ({"Nope": {}}, {"Left": {"effect": "lasers"}}, {"Left": {"colors": []}}, ["Left"]):
+        with pytest.raises(ValueError):
+            parse_strings(bad, {"Left"})
+
+
+def test_api_strings_live_options_and_playlist(api, tmp_path):
+    call, player, _ = api
+    opts = call("/api/options")[1]
+    assert opts["strings"] == [{"name": "Line", "pixels": 4}]
+    assert call("/api/live", {"colors": ["#400080"], "strings": {"Line": {"effect": "solid", "colors": ["#FF0000"]}}})[0] == 200
+    assert pixels(player.tick(0.0))[0] == (255, 0, 0)
+    assert call("/api/live", {"strings": {"Garage": {"colors": ["#FF0000"]}}})[0] == 400
+    code, pl = call("/api/playlist/add", {"name": "Mixed", "effect": "solid", "colors": ["#400080"], "seconds": 30,
+                                          "strings": {"Line": {"effect": "twinkle", "colors": ["#00C000"]}}}, token="sekret")
+    assert code == 200 and pl["items"][-1]["strings"]["Line"]["effect"] == "twinkle"
+    import json as _json
+    saved = _json.loads((tmp_path / "show.json").read_text())
+    assert saved["playlist"][-1]["strings"]["Line"]["colors"] == ["#00C000"]
+
+
+def test_groups_hide_everything_groups_and_skipped_strings(tmp_path):
+    from houselights.config import parse_config
+    from houselights.server import _Handler
+
+    cfg = parse_config({"show_dir": str(tmp_path), "state_file": str(tmp_path / "show.json")})
+    player = Player(cfg, two_string_layout(), NullOutput())
+    handler = type("H", (_Handler,), {"player": player}).__new__(type("H", (_Handler,), {"player": player}))
+    assert _Handler._groups(handler) == {}  # "Both" is everything, "Just left" has one string

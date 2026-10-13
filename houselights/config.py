@@ -132,6 +132,7 @@ def parse_config(raw: dict, base_dir: Path = Path(".")) -> Config:
     live.setdefault("effect", "chase")
     live.setdefault("speed", 40)
     live.setdefault("band", 8)
+    live["strings"] = parse_strings(live.get("strings"))
     _check_effect(live["effect"])
     state_file = raw.get("state_file", "show.json")
     return Config(
@@ -192,12 +193,56 @@ def _parse_item_kind(i: dict, show_dir: Path) -> Item:
             "colors": [parse_color(str(c)) for c in colors],
             "speed": min(100.0, max(1.0, float(i.get("speed", 40)))),
             "band": min(100, max(1, int(i.get("band", 8)))),
+            "strings": parse_strings(i.get("strings")),
         }
         seconds = float(i.get("seconds", 60))
         if not 1 <= seconds <= 24 * 3600:
             raise ValueError("Effect length must be between 1 second and 24 hours")
         return Item("effect", effect=str(i["effect"]), seconds=seconds, params=params)
     raise ValueError(f"Unknown playlist item type {kind!r}")
+
+
+MAX_STRINGS = 200
+
+
+def parse_strings(raw, names: set[str] | None = None) -> dict:
+    """Per-string settings: {model name: {effect, colors, speed, band, brightness (percent), off}}.
+
+    Each entry replaces the overall look for that one string. `names`, when given,
+    is the set of string (model) names allowed.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or len(raw) > MAX_STRINGS:
+        raise ValueError("strings must be an object of string name -> settings")
+    out = {}
+    for name, s in raw.items():
+        name = str(name)
+        if names is not None and name not in names:
+            raise ValueError(f"Unknown string {name!r}")
+        if not isinstance(s, dict):
+            raise ValueError(f"Settings for {name!r} must be an object")
+        effect = str(s.get("effect", "solid"))
+        _check_effect(effect)
+        colors = s.get("colors", ["#FFFFFF"])
+        if not isinstance(colors, list) or not 1 <= len(colors) <= MAX_COLORS:
+            raise ValueError(f"{name}: needs 1-{MAX_COLORS} colors")
+        out[name] = {
+            "effect": effect,
+            "colors": [c if isinstance(c, tuple) else parse_color(str(c)) for c in colors],
+            "speed": min(100.0, max(1.0, float(s.get("speed", 40)))),
+            "band": min(100, max(1, int(s.get("band", 8)))),
+            "brightness": min(100.0, max(5.0, float(s.get("brightness", 100)))),
+            "off": bool(s.get("off", False)),
+        }
+    return out
+
+
+def strings_to_json(strings: dict) -> dict:
+    return {
+        name: {**s, "colors": ["#%02X%02X%02X" % c for c in s["colors"]]}
+        for name, s in (strings or {}).items()
+    }
 
 
 def _check_effect(name: str) -> None:
@@ -234,6 +279,8 @@ def item_to_dict(item: Item, show_dir: Path) -> dict:
             "speed": item.params["speed"],
             "band": item.params["band"],
         })
+        if item.params.get("strings"):
+            d["strings"] = strings_to_json(item.params["strings"])
     return d
 
 

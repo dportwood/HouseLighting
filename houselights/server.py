@@ -35,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .config import MAX_COLORS, parse_item, parse_window
+from .config import MAX_COLORS, parse_item, parse_strings, parse_window
 from .effects import EFFECTS, parse_color
 from .player import Player
 
@@ -93,6 +93,8 @@ class _Handler(BaseHTTPRequestHandler):
                 "presets": {k: ["#%02X%02X%02X" % c for c in v] for k, v in cfg.presets.items()},
                 "admin": self._admin_ok(),
                 "token_required": bool(cfg.api_token),
+                "strings": [{"name": m.name, "pixels": m.nodes} for m in self.player.visible_models],
+                "groups": self._groups(),
             })
         if path == "/api/preview":
             return self._json(self._preview())
@@ -112,7 +114,7 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/api/live":
                 if not self.player.config.allow_live_outside_window and not self.player.in_window() and not self._admin_ok():
                     return self._error(409, "The show is off right now")
-                self.player.set_live(_live_params(body))
+                self.player.set_live(self._live_params(body))
             elif path == "/api/resume":
                 self.player.resume()
             elif path == "/api/shutdown":
@@ -151,6 +153,9 @@ class _Handler(BaseHTTPRequestHandler):
         raw_items = body.get("items")
         if not isinstance(raw_items, list) or len(raw_items) > MAX_ITEMS:
             raise ValueError(f"items must be a list of up to {MAX_ITEMS} playlist entries")
+        for i in raw_items:
+            if isinstance(i, dict) and i.get("strings"):
+                parse_strings(i["strings"], self._string_names())  # names must exist
         items = [parse_item(self._checked_item(i), self.player.config.show_dir) for i in raw_items]
         shuffle = body.get("shuffle")
         self.player.update_show(playlist=items, shuffle=None if shuffle is None else bool(shuffle))
@@ -159,6 +164,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _add_to_playlist(self, body):
         raw = {k: body[k] for k in ("name", "seconds", "effect", "colors", "speed", "band", "brightness") if k in body}
         raw["type"] = "effect"
+        raw["strings"] = parse_strings(body.get("strings"), self._string_names())
         self.player.add_item(parse_item(raw, self.player.config.show_dir))
         self._json(self.player.playlist())
 
@@ -181,6 +187,25 @@ class _Handler(BaseHTTPRequestHandler):
         return raw
 
     # ---- helpers ----
+
+    def _string_names(self) -> set[str]:
+        return {m.name for m in self.player.visible_models}
+
+    def _groups(self) -> dict[str, list[str]]:
+        """xLights model groups, limited to strings we drive; groups of everything are left out."""
+        names = self._string_names()
+        groups = {}
+        for g, members in self.player.layout.groups.items():
+            visible = [m for m in members if m in names]
+            if 1 < len(visible) < len(names):
+                groups[g] = visible
+        return groups
+
+    def _live_params(self, body: dict) -> dict:
+        params = _live_params(body)
+        if "strings" in body:
+            params["strings"] = parse_strings(body["strings"], self._string_names())
+        return params
 
     def _admin_ok(self) -> bool:
         token = self.player.config.api_token

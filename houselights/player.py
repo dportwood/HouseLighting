@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from .config import Config, Item, Window, item_to_dict, save_state, window_to_dict
+from .config import Config, Item, Window, item_to_dict, parse_strings, save_state, strings_to_json, window_to_dict
 from .effects import EFFECTS
 from .fseq import FSEQ, read_fseq
 from .layout import Layout
@@ -48,7 +48,20 @@ class EffectSource(Source):
         if self.seconds is not None and t >= self.seconds:
             return False
         frame[:] = 0
-        EFFECTS[self.effect](frame, self.models, self.params, t)
+        strings = self.params.get("strings") or {}
+        if not strings:
+            EFFECTS[self.effect](frame, self.models, self.params, t)
+            return True
+        # The overall look on every string without its own settings, then each custom string.
+        EFFECTS[self.effect](frame, [m for m in self.models if m.name not in strings], self.params, t)
+        for m in self.models:
+            s = strings.get(m.name)
+            if s is None or s["off"]:
+                continue
+            EFFECTS[s["effect"]](frame, [m], s, t)
+            if s["brightness"] < 99.9:
+                px = frame[m.start - 1 : m.end]
+                np.multiply(px, s["brightness"] / 100, out=px, casting="unsafe")
         return True
 
 
@@ -104,6 +117,8 @@ class Player:
         with self._lock:
             p = dict(self.live_params)
             p.update({k: v for k, v in params.items() if k in ("effect", "colors", "speed", "band")})
+            if "strings" in params:
+                p["strings"] = parse_strings(params["strings"])
             if p["effect"] not in EFFECTS:
                 raise ValueError(f"Unknown effect {p['effect']!r}")
             if not p["colors"]:
@@ -247,7 +262,8 @@ class Player:
                 "in_window": end is not None,
                 "window_end": end.strftime("%H:%M") if end else None,
                 "override_seconds_left": max(0, round(self._override_until - now_t)) if self._override else None,
-                "live": {**self.live_params, "colors": ["#%02X%02X%02X" % c for c in self.live_params["colors"]]},
+                "live": {**self.live_params, "colors": ["#%02X%02X%02X" % c for c in self.live_params["colors"]],
+                         "strings": strings_to_json(self.live_params.get("strings"))},
                 "brightness": self.live_brightness,
                 "fps": round(self._fps, 1),
                 "time": now.strftime("%H:%M:%S"),

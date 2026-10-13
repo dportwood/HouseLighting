@@ -10,6 +10,8 @@ Open to anyone on the network (the tablet):
   GET  /api/sequences      .fseq files available in the xLights show folder
   POST /api/live           {"effect", "colors": ["#RRGGBB"...], "speed", "band", "brightness"}
   POST /api/resume         drop the live override and go back to the show
+  POST /api/kiosk/play     same body as /api/live; plays for kiosk_seconds, then back to the show
+  POST /api/kiosk/exit     {"pin"} check the PIN that unlocks a device out of kiosk mode
 
 Admin (need `api_token` from the config, as X-Api-Token header or ?token=, when one is set):
   POST /api/off            lights off until Resume or the next show window
@@ -29,6 +31,7 @@ import json
 import os
 import sys
 import threading
+import time
 import traceback
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -40,6 +43,10 @@ from .effects import EFFECTS, parse_color
 from .player import Player
 
 WEB_DIR = Path(__file__).parent / "web"
+KIOSK_MAX_TRIES = 5
+KIOSK_LOCKOUT_SECONDS = 60
+_kiosk_lock = threading.Lock()
+_kiosk_state = {"failures": 0, "locked_until": 0.0}
 MAX_BODY = 256 * 1024
 MAX_ITEMS = 200
 MAX_WINDOWS = 50
@@ -93,6 +100,8 @@ class _Handler(BaseHTTPRequestHandler):
                 "presets": {k: ["#%02X%02X%02X" % c for c in v] for k, v in cfg.presets.items()},
                 "admin": self._admin_ok(),
                 "token_required": bool(cfg.api_token),
+                "kiosk_available": bool(cfg.kiosk_pin or cfg.api_token),
+                "kiosk_seconds": cfg.kiosk_seconds,
                 "strings": [{"name": m.name, "pixels": m.nodes} for m in self.player.visible_models],
                 "groups": self._groups(),
             })
@@ -117,6 +126,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self.player.set_live(self._live_params(body))
             elif path == "/api/resume":
                 self.player.resume()
+            elif path == "/api/kiosk/play":
+                if not self.player.config.allow_live_outside_window and not self.player.in_window():
+                    return self._error(409, "The show is off right now")
+                self.player.set_live(self._live_params(body), seconds=self.player.config.kiosk_seconds, source="kiosk")
+            elif path == "/api/kiosk/exit":
+                return self._kiosk_exit(body)
             elif path == "/api/shutdown":
                 if self.client_address[0] not in ("127.0.0.1", "::1"):
                     return self._error(403, "Only from this computer")
@@ -185,6 +200,23 @@ class _Handler(BaseHTTPRequestHandler):
                 raise ValueError(f"Sequence {name!r} isn't in the show folder")
             raw = {**raw, "file": name}
         return raw
+
+    def _kiosk_exit(self, body):
+        """PIN check for leaving kiosk mode, with a short lockout so it can't be guessed by trial."""
+        cfg = self.player.config
+        now = time.monotonic()
+        with _kiosk_lock:
+            if now < _kiosk_state["locked_until"]:
+                return self._error(429, f"Too many tries; wait {int(_kiosk_state['locked_until'] - now) + 1} s")
+            pins = {p for p in (cfg.kiosk_pin, cfg.api_token) if p}
+            if pins and str(body.get("pin", "")) in pins:
+                _kiosk_state["failures"] = 0
+                return self._json({"ok": True})
+            _kiosk_state["failures"] += 1
+            if _kiosk_state["failures"] >= KIOSK_MAX_TRIES:
+                _kiosk_state["failures"] = 0
+                _kiosk_state["locked_until"] = now + KIOSK_LOCKOUT_SECONDS
+        return self._error(403, "Wrong PIN")
 
     # ---- helpers ----
 

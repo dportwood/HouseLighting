@@ -90,6 +90,8 @@ class Config:
     override_minutes: float = 30.0
     allow_live_outside_window: bool = False
     api_token: str = ""
+    kiosk_pin: str = ""  # exits kiosk mode; falls back to api_token
+    kiosk_seconds: float = 60.0
     shuffle: bool = False
     windows: list[Window] = field(default_factory=list)
     playlist: list[Item] = field(default_factory=list)
@@ -144,6 +146,8 @@ def parse_config(raw: dict, base_dir: Path = Path(".")) -> Config:
         override_minutes=float(raw.get("override_minutes", 30)),
         allow_live_outside_window=bool(raw.get("allow_live_outside_window", False)),
         api_token=str(raw.get("api_token", "")),
+        kiosk_pin=str(raw.get("kiosk_pin", "")),
+        kiosk_seconds=min(600.0, max(10.0, float(raw.get("kiosk_seconds", 60)))),
         shuffle=bool(raw.get("shuffle", False)),
         windows=[parse_window(w) for w in raw.get("windows", [])],
         playlist=[parse_item(i, show_dir) for i in raw.get("playlist", [])],

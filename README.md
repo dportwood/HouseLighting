@@ -37,6 +37,14 @@ python -m houselights serve --config config.toml
   * **Schedule** — whether the show is on and when it next starts. Add/remove show
     times with days, on/off times (past midnight is fine), optional date range
     (e.g. a season), and an on/off switch per show time.
+  * **Which lights** (Controls) — pick all lights, an xLights group, or one string;
+    every control then edits just that. Strings can also be turned off or reset
+    to match. Per-string settings are kept by Save to playlist.
+  * **Kiosk** (admins) — locks a device (e.g. the outdoor tablet) to a simple
+    "make your own pattern" screen. Visitors tap **Show it on the house!** and
+    their pattern plays for `kiosk_seconds` (default 60), then the show carries
+    on; the next visitor can make a new one any time. Leaving kiosk mode needs
+    `kiosk_pin` (or `api_token`); 5 wrong tries lock it for a minute.
 * Edits are saved to `show.json` next to `config.toml` and apply immediately;
   `config.toml`'s `windows`/`playlist`/`shuffle` only seed `show.json` the first
   time. Delete `show.json` to start over from `config.toml`.

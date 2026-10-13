@@ -62,7 +62,7 @@
   .msg.ok { color: var(--ok); }
   .msg:empty { display: none; }
   .hidden { display: none !important; }
-  .tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; margin: 0 -4px; background: var(--bg); border-radius: 14px; }
+  .tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; margin: 0 -4px; background: var(--bg); border-radius: 14px; }
   .tabs button { min-height: 46px; border-radius: 10px; border: 0; background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 600; }
   .tabs button[aria-selected="true"] { background: var(--text); color: var(--bg); }
   .tab { display: grid; gap: 16px; }
@@ -103,24 +103,51 @@
   .win-summary { font-weight: 600; }
   .save-bar { position: sticky; bottom: 8px; display: flex; gap: 10px; padding: 10px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 14px; align-items: center; }
   .save-bar span { flex: 1; font-weight: 600; }
+
+  /* kiosk */
+  .kiosk-only { display: none !important; }
+  body.kiosk .kiosk-only { display: block !important; }
+  body.kiosk .not-kiosk { display: none !important; }
+  .kiosk-title { font-size: 26px; font-weight: 800; margin: 0 0 6px; line-height: 1.2; }
+  .kiosk-steps { margin: 0; padding-left: 20px; color: var(--muted); }
+  .kiosk-bar { position: sticky; bottom: 8px; z-index: 6; padding: 12px; background: var(--panel-2); border: 2px solid var(--accent); border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .kiosk-go { width: 100%; min-height: 68px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-size: 22px; font-weight: 800; }
+  .kiosk-go:disabled { background: var(--panel); color: var(--muted); opacity: 1; font-size: 18px; }
+  .kiosk-timer { text-align: center; font-weight: 700; margin: 0 0 10px; font-size: 17px; }
+  .kiosk-timer:empty { display: none; }
+  .kiosk-again { width: 100%; margin-top: 8px; }
+  .kiosk-exit { min-height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 14px; }
+  .overlay { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.7); display: grid; place-items: center; padding: 16px; }
+  .overlay section { width: min(420px, 100%); }
 </style>
 </head>
 <body>
 <main>
   <header>
     <h1>House Lights</h1>
-    <div class="status"><span id="statusText">Connecting…</span><span class="dot" id="statusDot"></span></div>
+    <div class="status"><span id="statusText" class="not-kiosk">Connecting…</span><span class="dot" id="statusDot"></span>
+      <button class="kiosk-exit kiosk-only" id="kioskExitBtn" aria-label="Exit kiosk mode">🔒 Exit</button></div>
   </header>
 
-  <nav class="tabs" role="tablist">
+  <nav class="tabs not-kiosk" role="tablist">
     <button role="tab" id="tabBtn-controls" aria-controls="tab-controls" aria-selected="true">Controls</button>
     <button role="tab" id="tabBtn-playlist" aria-controls="tab-playlist" aria-selected="false">Playlist</button>
     <button role="tab" id="tabBtn-schedule" aria-controls="tab-schedule" aria-selected="false">Schedule</button>
+    <button role="tab" id="tabBtn-kiosk" aria-controls="tab-kiosk" aria-selected="false" class="admin-only hidden">Kiosk</button>
   </nav>
   <div class="msg" id="msg" role="status" aria-live="polite"></div>
 
   <!-- ===== Controls ===== -->
   <div class="tab" id="tab-controls" role="tabpanel">
+    <section class="kiosk-only">
+      <p class="kiosk-title">Make your own light show!</p>
+      <ol class="kiosk-steps">
+        <li>Pick colors — tap a theme or a color square.</li>
+        <li>Pick an effect and speed. You can even change single strings of lights.</li>
+        <li>Tap <b>Show it on the house!</b> — it plays for <span class="kioskLen">1 minute</span>.</li>
+      </ol>
+    </section>
+
     <section>
       <h2>Which lights</h2>
       <div class="targets" id="targets" role="group" aria-label="Which lights to change"></div>
@@ -152,7 +179,7 @@
     <section>
       <label class="slider">Speed <input type="range" id="speed" min="1" max="100"><output id="speedOut"></output></label>
       <label class="slider" id="bandRow">Band size <input type="range" id="band" min="1" max="40"><output id="bandOut"></output></label>
-      <label class="slider">Brightness <input type="range" id="brightness" min="5" max="100"><output id="brightnessOut"></output></label>
+      <label class="slider not-kiosk">Brightness <input type="range" id="brightness" min="5" max="100"><output id="brightnessOut"></output></label>
       <div class="row hidden" id="stringActions" style="margin-top:8px">
         <button class="ghost" id="matchAll">Match all lights</button>
         <button class="ghost" id="toggleOff">Turn off</button>
@@ -162,9 +189,9 @@
       </div>
     </section>
 
-    <button class="big" id="resume">Back to the show</button>
+    <button class="big not-kiosk" id="resume">Back to the show</button>
 
-    <section class="admin-only hidden" id="saveCard">
+    <section class="admin-only hidden not-kiosk" id="saveCard">
       <h2>Save to playlist</h2>
       <p class="help">Adds what you've set above (colors, effect, speed, brightness) as a new playlist item.</p>
       <div class="fields" style="margin-top:10px">
@@ -187,7 +214,13 @@
       <canvas id="preview" height="10"></canvas>
     </section>
 
-    <section class="admin-only hidden">
+    <div class="kiosk-bar kiosk-only" id="kioskBar">
+      <p class="kiosk-timer" id="kioskTimer" aria-live="polite"></p>
+      <button class="kiosk-go" id="kioskGo">Show it on the house!</button>
+      <button class="ghost kiosk-again hidden" id="kioskReset">Start over with a fresh pattern</button>
+    </div>
+
+    <section class="admin-only hidden not-kiosk">
       <h2>Admin</h2>
       <div class="row">
         <button class="ghost" id="skip">Next in playlist</button>
@@ -243,6 +276,32 @@
     </div>
   </div>
 
+  <!-- ===== Kiosk (admin) ===== -->
+  <div class="tab hidden" id="tab-kiosk" role="tabpanel">
+    <section>
+      <h2>Kiosk mode</h2>
+      <p class="help">Locks this device to a simple “make your own pattern” screen for visitors. Their pattern plays on the
+        house for <span class="kioskLen">1 minute</span>, then the show carries on; the next person can make a new one at any time.
+        Leaving kiosk mode needs the PIN.</p>
+      <p class="help" id="kioskUnavailable" style="margin-top:10px;color:var(--warn)">Set <code>kiosk_pin</code> (or <code>api_token</code>) in config.toml and restart the player to use kiosk mode.</p>
+      <div class="row" style="margin-top:12px"><button class="primary" id="kioskStart">Start kiosk mode on this device</button></div>
+    </section>
+  </div>
+
+  <div class="overlay hidden" id="kioskExitDialog" role="dialog" aria-modal="true" aria-labelledby="kioskExitTitle">
+    <section>
+      <h2 id="kioskExitTitle">Leave kiosk mode</h2>
+      <div class="row" style="margin-top:10px">
+        <input class="text" id="kioskPin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" aria-label="PIN">
+      </div>
+      <p class="msg" id="kioskExitMsg" style="margin:8px 0 0"></p>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="kioskExitCancel">Cancel</button>
+        <button class="primary" id="kioskExitOk">Leave</button>
+      </div>
+    </section>
+  </div>
+
   <!-- ===== Unlock (shown when a PIN is configured and this device doesn't have it) ===== -->
   <section id="unlock" class="hidden">
     <h2>Editing is locked</h2>
@@ -259,6 +318,7 @@ const MAX_COLORS = 16;
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 let presets = {}, dirty = false, sendTimer = null, lastEdit = 0, isAdmin = false, tokenRequired = false, tab = "controls";
+let kioskMode = false, kioskAvailable = false, kioskSeconds = 60, lastStatus = null;
 
 // ---------- storage (per device; may be unavailable) ----------
 const store = {
@@ -305,7 +365,7 @@ function dotsFor(colors) { return el("span", { class: "dots" }, ...colors.map(c 
 // ---------- admin / unlock ----------
 function applyAdmin() {
   document.querySelectorAll(".admin-only").forEach(n => n.classList.toggle("hidden", !isAdmin));
-  $("unlock").classList.toggle("hidden", isAdmin || !tokenRequired || tab === "controls");
+  $("unlock").classList.toggle("hidden", kioskMode || isAdmin || !tokenRequired || tab === "controls");
 }
 
 $("unlockBtn").addEventListener("click", async () => {
@@ -319,9 +379,9 @@ $("unlockBtn").addEventListener("click", async () => {
 });
 
 // ---------- tabs ----------
-const TABS = ["controls", "playlist", "schedule"];
+const TABS = ["controls", "playlist", "schedule", "kiosk"];
 function showTab(name) {
-  if (!TABS.includes(name)) name = "controls";
+  if (!TABS.includes(name) || kioskMode) name = "controls";
   tab = name;
   for (const t of TABS) {
     $("tab-" + t).classList.toggle("hidden", t !== name);
@@ -480,6 +540,7 @@ function renderPresets() {
 }
 
 function edited() {
+  if (kioskMode) { lastEdit = Date.now(); kioskDraftChanged = true; updateKiosk(); return; }
   dirty = true;
   lastEdit = Date.now();
   clearTimeout(sendTimer);
@@ -507,6 +568,8 @@ function showStatus(s) {
   $("resume").classList.toggle("hidden", s.mode !== "live" && s.mode !== "off");
   // Pick up changes made elsewhere (another device), but never while this one is being used,
   // and only redraw when something actually differs so a tap isn't lost to a redraw.
+  lastStatus = s;
+  if (kioskMode) { updateKiosk(); return; }
   if (!dirty && Date.now() - lastEdit > 3000 && s.live) {
     const incoming = { effect: s.live.effect, colors: s.live.colors, speed: s.live.speed, band: s.live.band, strings: s.live.strings || {} };
     const same = JSON.stringify(incoming) === JSON.stringify({ effect: look.effect, colors: look.colors, speed: look.speed, band: look.band, strings: look.strings })
@@ -558,6 +621,83 @@ $("saveBtn").addEventListener("click", async () => {
     plKey = "";
     say(`Saved “${name}” to the playlist`, true);
   } catch (e) { say(e.message); }
+});
+
+// ---------- kiosk ----------
+let kioskDraftChanged = false, kioskPlayed = false, lastTouch = Date.now();
+const KIOSK_IDLE_RESET_MS = 90 * 1000;
+
+function freshLook() {
+  const first = Object.values(presets)[0] || ["#400080", "#FF3000"];
+  Object.assign(look, { effect: "chase", colors: [...first], speed: 40, band: 8, strings: {} });
+  target = { kind: "all" };
+  kioskDraftChanged = false; kioskPlayed = false;
+  refreshControls(); renderTargets(true);
+  $("stringsBox").open = false;
+  updateKiosk();
+}
+
+function applyKiosk() {
+  document.body.classList.toggle("kiosk", kioskMode);
+  applyAdmin();
+  if (kioskMode) { showTab("controls"); freshLook(); scrollTo(0, 0); }
+}
+
+function updateKiosk() {
+  if (!kioskMode) return;
+  const s = lastStatus;
+  const playing = s && s.override_source === "kiosk" && s.override_seconds_left > 0;
+  let timer = "";
+  if (s && !s.in_window && !playing) {
+    timer = s.next_start ? `The lights are resting — back ${fmtWhen(s.next_start)}.` : "The lights are resting right now.";
+  } else if (playing) {
+    timer = `On the house now! ${fmtTime(s.override_seconds_left)} left`;
+  } else if (kioskPlayed) {
+    timer = "That was great! Make another one.";
+  }
+  $("kioskTimer").textContent = timer;
+  $("kioskGo").textContent = playing && !kioskDraftChanged ? "It's playing — change something!" : "Show it on the house!";
+  $("kioskGo").disabled = (s && !s.in_window && !playing) || (playing && !kioskDraftChanged);
+  $("kioskReset").classList.toggle("hidden", !kioskPlayed && !kioskDraftChanged);
+}
+
+$("kioskGo").addEventListener("click", async () => {
+  try {
+    lastStatus = await api("/api/kiosk/play", { effect: look.effect, colors: look.colors, speed: look.speed, band: look.band, strings: look.strings });
+    kioskDraftChanged = false; kioskPlayed = true;
+    say("");
+  } catch (e) { say(e.message === "The show is off right now" ? "The lights are resting right now — try again during the show." : e.message); }
+  updateKiosk();
+});
+$("kioskReset").addEventListener("click", () => { freshLook(); scrollTo(0, 0); });
+addEventListener("pointerdown", () => { lastTouch = Date.now(); }, true);
+setInterval(() => {
+  if (!kioskMode) return;
+  const s = lastStatus, playing = s && s.override_source === "kiosk" && s.override_seconds_left > 0;
+  if (!playing && (kioskDraftChanged || kioskPlayed) && Date.now() - lastTouch > KIOSK_IDLE_RESET_MS) { freshLook(); scrollTo(0, 0); }
+  updateKiosk();
+}, 1000);
+
+$("kioskStart").addEventListener("click", () => {
+  if (!kioskAvailable) return say("Set a kiosk PIN in config.toml first");
+  if (!confirm("Lock this device into kiosk mode? You'll need the PIN to leave it.")) return;
+  kioskMode = true;
+  store.set("hl_kiosk", "1");
+  applyKiosk();
+});
+function closeKioskExit() { $("kioskExitDialog").classList.add("hidden"); $("kioskPin").value = ""; $("kioskExitMsg").textContent = ""; }
+$("kioskExitBtn").addEventListener("click", () => { $("kioskExitDialog").classList.remove("hidden"); $("kioskPin").focus(); });
+$("kioskExitCancel").addEventListener("click", closeKioskExit);
+$("kioskPin").addEventListener("keydown", e => { if (e.key === "Enter") $("kioskExitOk").click(); });
+$("kioskExitOk").addEventListener("click", async () => {
+  try {
+    await api("/api/kiosk/exit", { pin: $("kioskPin").value });
+    closeKioskExit();
+    kioskMode = false;
+    store.set("hl_kiosk", "");
+    applyKiosk();
+    showTab("kiosk");
+  } catch (e) { $("kioskExitMsg").textContent = e.message; }
 });
 
 // Preview: one row per model, pixels scaled to the canvas width.
@@ -818,11 +958,18 @@ $("schedSave").addEventListener("click", async () => {
     lightGroups = opts.groups || {};
     isAdmin = opts.admin;
     tokenRequired = opts.token_required;
+    kioskAvailable = opts.kiosk_available;
+    kioskSeconds = opts.kiosk_seconds || 60;
+    document.querySelectorAll(".kioskLen").forEach(n => { n.textContent = kioskSeconds % 60 ? `${kioskSeconds} seconds` : `${kioskSeconds / 60} minute${kioskSeconds === 60 ? "" : "s"}`; });
+    $("kioskUnavailable").classList.toggle("hidden", kioskAvailable);
+    $("kioskStart").disabled = !kioskAvailable;
     renderEffects(opts.effects);
     renderPresets();
   } catch (e) { say(e.message); }
   refreshControls(); renderTargets(true);
+  kioskMode = store.get("hl_kiosk") === "1";
   showTab(location.hash.slice(1));
+  applyKiosk();
   await poll();
   setInterval(poll, 2000);
   setInterval(drawPreview, 250);

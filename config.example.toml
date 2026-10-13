@@ -7,6 +7,8 @@ skip_controllers = ["FPP-Housenew"]   # the house Pi (.64) is broken
 http_port = 8080
 override_minutes = 30            # tablet changes revert to the show after this long
 allow_live_outside_window = false
+# kiosk_pin = "2468"            # leaves kiosk mode (falls back to api_token); needed for kiosk mode
+# kiosk_seconds = 60             # how long a visitor's pattern plays
 # api_token = "change-me"        # when set, Off/Skip need it (?token=... or X-Api-Token)
 
 shuffle = true

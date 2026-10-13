@@ -422,3 +422,38 @@ def test_groups_hide_everything_groups_and_skipped_strings(tmp_path):
     player = Player(cfg, two_string_layout(), NullOutput())
     handler = type("H", (_Handler,), {"player": player}).__new__(type("H", (_Handler,), {"player": player}))
     assert _Handler._groups(handler) == {}  # "Both" is everything, "Just left" has one string
+
+
+# ---- kiosk ----
+
+def test_kiosk_play_lasts_kiosk_seconds_then_show_resumes(tmp_path):
+    player, _ = make_player(tmp_path, kiosk_seconds=60)
+    player.tick(0.0)
+    player.set_live({"effect": "solid", "colors": [ORANGE]}, now_t=1.0, seconds=60, source="kiosk")
+    st = player.status(1.0)
+    assert st["mode"] == "live" and st["override_source"] == "kiosk" and st["override_seconds_left"] == 60
+    assert pixels(player.tick(30.0))[0] == ORANGE
+    player.set_live({"effect": "solid", "colors": [PURPLE]}, now_t=50.0, seconds=60, source="kiosk")  # next visitor
+    assert player.status(50.0)["override_seconds_left"] == 60
+    assert pixels(player.tick(100.0))[0] == PURPLE
+    player.tick(111.0)
+    assert player.status(111.0)["mode"] == "show"
+
+
+def test_api_kiosk_play_and_exit_pin_with_lockout(api):
+    import houselights.server as srv
+
+    call, player, clock = api
+    srv._kiosk_state.update(failures=0, locked_until=0.0)
+    opts = call("/api/options")[1]
+    assert opts["kiosk_available"] is True and opts["kiosk_seconds"] == 60
+    code, st = call("/api/kiosk/play", {"effect": "chase", "colors": ["#400080", "#FF3000"]})  # no PIN needed
+    assert code == 200 and st["override_source"] == "kiosk" and st["override_seconds_left"] == 60
+    assert call("/api/kiosk/exit", {"pin": "sekret"})[0] == 200
+    for _ in range(4):
+        assert call("/api/kiosk/exit", {"pin": "nope"})[0] == 403
+    assert call("/api/kiosk/exit", {"pin": "nope"})[0] == 403  # 5th wrong try starts the lockout
+    assert call("/api/kiosk/exit", {"pin": "sekret"})[0] == 429  # even the right PIN waits
+    srv._kiosk_state.update(failures=0, locked_until=0.0)
+    clock.now = datetime(2026, 10, 12, 3, 0)
+    assert call("/api/kiosk/play", {"colors": ["#FF0000"]})[0] == 409

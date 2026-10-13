@@ -103,6 +103,7 @@ class Player:
         self._current_index: int | None = None  # playlist index of _current
         self._override: Source | None = None
         self._override_until = 0.0
+        self._override_source = ""  # "controls" or "kiosk"
         self._off = False
         self._was_in_window = False
         self._black_until = 0.0
@@ -111,7 +112,8 @@ class Player:
 
     # ---- control (called from the web server) ----
 
-    def set_live(self, params: dict, now_t: float | None = None) -> None:
+    def set_live(self, params: dict, now_t: float | None = None, seconds: float | None = None,
+                 source: str = "controls") -> None:
         """Start or update the live override. `params` may hold effect, colors, speed, band, brightness."""
         now_t = time.perf_counter() if now_t is None else now_t
         with self._lock:
@@ -132,7 +134,10 @@ class Player:
                 self._override = EffectSource(p["effect"], p["effect"], p, self.models, None)
                 self._override.t0 = now_t
             self._override.brightness = self.live_brightness
-            self._override_until = now_t + self.config.override_minutes * 60
+            if source != self._override_source:
+                self._override.t0 = now_t  # a new kiosk pattern starts its motion fresh
+            self._override_source = source
+            self._override_until = now_t + (seconds if seconds is not None else self.config.override_minutes * 60)
             self._off = False
 
     def resume(self) -> None:
@@ -262,6 +267,7 @@ class Player:
                 "in_window": end is not None,
                 "window_end": end.strftime("%H:%M") if end else None,
                 "override_seconds_left": max(0, round(self._override_until - now_t)) if self._override else None,
+                "override_source": self._override_source if self._override else None,
                 "live": {**self.live_params, "colors": ["#%02X%02X%02X" % c for c in self.live_params["colors"]],
                          "strings": strings_to_json(self.live_params.get("strings"))},
                 "brightness": self.live_brightness,

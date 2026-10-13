@@ -26,13 +26,24 @@ python -m houselights serve --config config.toml
 
 * Plays the playlist (rendered `.fseq` files and live effects) inside the
   schedule windows; outside them it sends black for a second, then goes quiet.
-* Control page for the tablet/phone: `http://<this PC>:8080/`. Theme presets,
-  colors, effect (chase / fade / twinkle / solid), speed, band size, brightness,
-  and a live preview. Changes take over immediately and revert to the show after
-  `override_minutes`; "Back to the show" reverts now.
+* Control page for the tablet/phone: `http://<this PC>:8080/`, three tabs:
+  * **Controls** — theme presets, colors, effect (chase / fade / twinkle / strobe /
+    solid), speed, band size, brightness, live preview. Changes take over
+    immediately and revert to the show after `override_minutes`; "Back to the
+    show" reverts now. **Save to playlist** stores the current look as a playlist item.
+  * **Playlist** — what's playing, progress, up next, play now. **Edit playlist**:
+    rename, reorder, remove, change length/speed/brightness, shuffle, add xLights
+    sequences from the show folder.
+  * **Schedule** — whether the show is on and when it next starts. Add/remove show
+    times with days, on/off times (past midnight is fine), optional date range
+    (e.g. a season), and an on/off switch per show time.
+* Edits are saved to `show.json` next to `config.toml` and apply immediately;
+  `config.toml`'s `windows`/`playlist`/`shuffle` only seed `show.json` the first
+  time. Delete `show.json` to start over from `config.toml`.
 * Outside the show window the page refuses changes (unless
   `allow_live_outside_window = true`).
-* Set `api_token` to require a token for the admin buttons (Off, Next).
+* Set `api_token` (a PIN) to lock editing and the admin buttons. The page then
+  asks for the PIN once per device. Recommended once the tablet is outside.
 * `--dry-run` runs everything, including the page, without sending to the lights.
 * Windows will ask to allow Python through the firewall the first time; allow it
   on private networks so the tablet can reach the page.
@@ -57,6 +68,18 @@ Stop-ScheduledTask  -TaskName "HouseLights Player"   # stop the show player
 Start-ScheduledTask -TaskName "HouseLights Player"   # start it (e.g. after editing config.toml)
 powershell -ExecutionPolicy Bypass -File scripts\install-startup-task.ps1 -Uninstall
 ```
+
+### Control window on this PC
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
+```
+
+Adds a "House Lights" shortcut (Desktop and Start menu) that opens a small
+window: status (what's playing, show times, startup task), Start / Stop /
+Restart, open the control page, and the recent log. Stop blacks out the lights
+and exits cleanly; it only force-ends the task if the player doesn't respond.
+Or run `pythonw -m houselights control --config config.toml`.
 
 Playlist items take an optional `name` and `brightness` (percent). The tablet's
 brightness slider only applies while its override is active.

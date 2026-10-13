@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from .config import Config, Item
+from .config import Config, Item, Window, item_to_dict, save_state, window_to_dict
 from .effects import EFFECTS
 from .fseq import FSEQ, read_fseq
 from .layout import Layout
@@ -84,7 +84,7 @@ class Player:
 
         self._lock = threading.RLock()
         self._fseq_cache: dict[str, FSEQ] = {}
-        self._order = list(range(len(config.playlist)))
+        self._order = self._new_order()
         self._pos = -1
         self._current: Source | None = None
         self._current_index: int | None = None  # playlist index of _current
@@ -154,10 +154,8 @@ class Player:
         with self._lock:
             items = []
             for i, item in enumerate(self.config.playlist):
-                entry = {"index": i, "name": item.describe(), "type": item.type, "seconds": self._duration(item)}
-                if item.type == "effect":
-                    entry["effect"] = item.effect
-                    entry["colors"] = ["#%02X%02X%02X" % c for c in item.params["colors"]]
+                entry = item_to_dict(item, self.config.show_dir)
+                entry.update({"index": i, "name": item.describe(), "seconds": self._duration(item)})
                 items.append(entry)
             current = self._current_index if self._current is not None else None
             if self._pos + 1 < len(self._order):
@@ -172,6 +170,58 @@ class Player:
                 "next": up_next if current is not None else None,
                 "shuffle": self.config.shuffle,
             }
+
+    def schedule(self) -> dict:
+        with self._lock:
+            now = self.clock()
+            end = self.config.window_end(now)
+            nxt = self.config.next_start(now)
+            return {
+                "windows": [window_to_dict(w) for w in self.config.windows],
+                "in_window": end is not None,
+                "window_end": end.isoformat(timespec="minutes") if end else None,
+                "next_start": nxt.isoformat(timespec="minutes") if nxt else None,
+                "now": now.isoformat(timespec="seconds"),
+            }
+
+    def update_show(self, windows: list[Window] | None = None, playlist: list[Item] | None = None,
+                    shuffle: bool | None = None, save: bool = True) -> None:
+        """Swap in an edited schedule and/or playlist without interrupting what's on the lights.
+
+        The item playing now keeps playing (even if it was removed or edited); the
+        playlist carries on from it, or from the top if it's gone.
+        """
+        for item in playlist or []:
+            if item.type == "fseq":
+                self._load(item)  # read new sequences before taking the lock; raises if missing/bad
+        with self._lock:
+            if windows is not None:
+                self.config.windows = windows
+            if shuffle is not None:
+                self.config.shuffle = shuffle
+            if playlist is not None:
+                current_id = self.config.playlist[self._current_index].id if self._current_index is not None else None
+                self.config.playlist = playlist
+                self._order = self._new_order()
+                ids = [i.id for i in playlist]
+                if current_id in ids:
+                    self._current_index = ids.index(current_id)
+                    self._order.remove(self._current_index)
+                    self._order.insert(0, self._current_index)
+                    self._pos = 0
+                else:
+                    self._current_index = None
+                    self._pos = -1
+            elif shuffle is not None:
+                self._order = self._new_order()
+                self._pos = self._order.index(self._current_index) if self._current_index in self._order else -1
+            if save:
+                save_state(self.config)
+
+    def add_item(self, item: Item) -> None:
+        with self._lock:
+            playlist = list(self.config.playlist) + [item]
+        self.update_show(playlist=playlist)
 
     def in_window(self) -> bool:
         return self.config.in_window(self.clock())
@@ -189,7 +239,9 @@ class Player:
             else:
                 mode, label = "idle", None
             end = self.config.window_end(now)
+            nxt = self.config.next_start(now) if end is None else None
             return {
+                "next_start": nxt.isoformat(timespec="minutes") if nxt else None,
                 "mode": mode,
                 "playing": label,
                 "in_window": end is not None,
@@ -267,9 +319,16 @@ class Player:
 
     # ---- internals ----
 
+    def _new_order(self) -> list[int]:
+        order = list(range(len(self.config.playlist)))
+        if self.config.shuffle:
+            random.shuffle(order)
+        return order
+
     def _advance(self, now_t: float) -> None:
         if not self.config.playlist:
             self._current = None
+            self._current_index = None
             return
         self._pos += 1
         if self._pos >= len(self._order):

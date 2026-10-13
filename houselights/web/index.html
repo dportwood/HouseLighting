@@ -7,48 +7,61 @@
 <title>House Lights</title>
 <style>
   :root {
-    --bg: #121016; --panel: #1c1922; --line: #2c2834; --text: #f1edf6; --muted: #a59fb0;
-    --accent: #ff7a1a; --accent-ink: #1a0d02; --ok: #5bd18b; --warn: #f5b942;
+    --bg: #121016; --panel: #1c1922; --panel-2: #24202b; --line: #2c2834; --text: #f1edf6; --muted: #a59fb0;
+    --accent: #ff7a1a; --accent-ink: #1a0d02; --ok: #5bd18b; --warn: #f5b942; --danger: #ff6b6b;
     --radius: 14px;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   main { max-width: 720px; margin: 0 auto; padding: 16px 16px 40px; display: grid; gap: 16px; }
   h1 { font-size: 20px; margin: 0; }
   h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  h2 .meta { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; text-align: right; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.show { background: var(--ok); } .dot.live { background: var(--accent); } .dot.off, .dot.idle { background: #555; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .35; cursor: default; }
   .presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .preset { border: 2px solid transparent; border-radius: 12px; padding: 0; overflow: hidden; background: #000; color: #fff; cursor: pointer; text-align: left; }
+  .preset { border: 2px solid transparent; border-radius: 12px; padding: 0; overflow: hidden; background: #000; color: #fff; text-align: left; }
   .preset .bar { height: 44px; }
   .preset span { display: block; padding: 8px 10px; font-weight: 600; background: rgba(0,0,0,.55); }
   .preset.active { border-color: var(--text); }
   .swatches { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .swatch { position: relative; width: 56px; height: 56px; border-radius: 12px; border: 2px solid var(--line); overflow: hidden; }
   .swatch input { position: absolute; inset: -10px; width: calc(100% + 20px); height: calc(100% + 20px); border: 0; padding: 0; cursor: pointer; background: none; }
-  .round { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 26px; line-height: 1; cursor: pointer; }
-  .round:disabled { opacity: .3; }
+  .round { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--line); background: transparent; font-size: 26px; line-height: 1; }
   .seg { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
-  .seg button { min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer; text-transform: capitalize; }
+  .seg button { min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: transparent; font-size: 16px; font-weight: 600; text-transform: capitalize; }
   .seg button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   label.slider { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 10px; min-height: 48px; }
   label.slider output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; height: 36px; accent-color: var(--accent); }
-  .big { width: 100%; min-height: 56px; border-radius: 12px; border: 0; background: var(--text); color: var(--bg); font-size: 18px; font-weight: 700; cursor: pointer; }
-  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
-  .ghost { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); font-weight: 600; cursor: pointer; }
+  .big { width: 100%; min-height: 56px; border-radius: 12px; border: 0; background: var(--text); color: var(--bg); font-size: 18px; font-weight: 700; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; } .row > * { flex: 1; }
+  .ghost { min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: transparent; font-weight: 600; }
+  .primary { min-height: 48px; padding: 0 18px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .danger { color: var(--danger); }
+  .icon { min-width: 44px; min-height: 44px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background: transparent; font-size: 18px; }
   canvas { width: 100%; display: block; border-radius: 10px; background: #000; }
   .msg { color: var(--warn); font-size: 14px; }
+  .msg.ok { color: var(--ok); }
   .msg:empty { display: none; }
   .hidden { display: none !important; }
-  .tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 -4px; background: var(--bg); border-radius: 14px; }
-  .tabs button { min-height: 46px; border-radius: 10px; border: 0; background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 600; cursor: pointer; }
+  .tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; margin: 0 -4px; background: var(--bg); border-radius: 14px; }
+  .tabs button { min-height: 46px; border-radius: 10px; border: 0; background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 600; }
   .tabs button[aria-selected="true"] { background: var(--text); color: var(--bg); }
   .tab { display: grid; gap: 16px; }
-  h2 .meta { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .field { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+  .field input, .field select, .text { min-height: 44px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 16px; width: 100%; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .help { color: var(--muted); font-size: 14px; margin: 0; }
+
+  /* playlist */
   .pl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .pl li { position: relative; display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; min-height: 64px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .pl li.current { border-color: var(--accent); background: rgba(255, 122, 26, .08); }
@@ -56,13 +69,30 @@
   .pl li.current .num { color: var(--accent); }
   .pl .name { font-weight: 600; overflow-wrap: anywhere; }
   .pl .sub { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .pl .dots { display: inline-flex; gap: 3px; }
-  .pl .dots i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dots { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
   .badge { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
   .badge.playing { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .pl .play { min-height: 40px; padding: 0 16px; }
   .pl .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); transition: width 1s linear; }
   .empty { color: var(--muted); margin: 0; }
+  .edit-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+  .edit-item .head { display: flex; gap: 8px; align-items: center; }
+  .edit-item .head .text { flex: 1; font-weight: 600; }
+  .edit-list { display: grid; gap: 10px; }
+  .toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  .toggle input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+  /* schedule */
+  .sched-now { font-size: 18px; font-weight: 700; margin: 0; }
+  .win { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+  .win.off { opacity: .6; }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .days button { min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; font-weight: 700; font-size: 14px; }
+  .days button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .win-summary { font-weight: 600; }
+  .save-bar { position: sticky; bottom: 8px; display: flex; gap: 10px; padding: 10px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 14px; align-items: center; }
+  .save-bar span { flex: 1; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -75,129 +105,255 @@
   <nav class="tabs" role="tablist">
     <button role="tab" id="tabBtn-controls" aria-controls="tab-controls" aria-selected="true">Controls</button>
     <button role="tab" id="tabBtn-playlist" aria-controls="tab-playlist" aria-selected="false">Playlist</button>
+    <button role="tab" id="tabBtn-schedule" aria-controls="tab-schedule" aria-selected="false">Schedule</button>
   </nav>
-  <div class="msg" id="msg" role="status"></div>
+  <div class="msg" id="msg" role="status" aria-live="polite"></div>
 
+  <!-- ===== Controls ===== -->
   <div class="tab" id="tab-controls" role="tabpanel">
-  <section>
-    <h2>Themes</h2>
-    <div class="presets" id="presets"></div>
-  </section>
+    <section>
+      <h2>Themes</h2>
+      <div class="presets" id="presets"></div>
+    </section>
 
-  <section>
-    <h2>Colors</h2>
-    <div class="swatches" id="swatches">
-      <button class="round" id="removeColor" aria-label="Remove a color">−</button>
-      <button class="round" id="addColor" aria-label="Add a color">+</button>
-    </div>
-  </section>
+    <section>
+      <h2>Colors</h2>
+      <div class="swatches" id="swatches">
+        <button class="round" id="removeColor" aria-label="Remove a color">−</button>
+        <button class="round" id="addColor" aria-label="Add a color">+</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Effect</h2>
-    <div class="seg" id="effects"></div>
-  </section>
+    <section>
+      <h2>Effect</h2>
+      <div class="seg" id="effects"></div>
+    </section>
 
-  <section>
-    <label class="slider">Speed <input type="range" id="speed" min="1" max="100"><output id="speedOut"></output></label>
-    <label class="slider" id="bandRow">Band size <input type="range" id="band" min="1" max="40"><output id="bandOut"></output></label>
-    <label class="slider">Brightness <input type="range" id="brightness" min="5" max="100"><output id="brightnessOut"></output></label>
-  </section>
+    <section>
+      <label class="slider">Speed <input type="range" id="speed" min="1" max="100"><output id="speedOut"></output></label>
+      <label class="slider" id="bandRow">Band size <input type="range" id="band" min="1" max="40"><output id="bandOut"></output></label>
+      <label class="slider">Brightness <input type="range" id="brightness" min="5" max="100"><output id="brightnessOut"></output></label>
+    </section>
 
-  <button class="big" id="resume">Back to the show</button>
+    <button class="big" id="resume">Back to the show</button>
 
-  <section>
-    <h2>Preview</h2>
-    <canvas id="preview" height="10"></canvas>
-  </section>
+    <section class="admin-only hidden" id="saveCard">
+      <h2>Save to playlist</h2>
+      <p class="help">Adds what you've set above (colors, effect, speed, brightness) as a new playlist item.</p>
+      <div class="fields" style="margin-top:10px">
+        <label class="field">Name <input id="saveName" maxlength="60" placeholder="e.g. Witch Twinkle"></label>
+        <label class="field">Play for
+          <select id="saveSeconds">
+            <option value="30">30 seconds</option>
+            <option value="60" selected>1 minute</option>
+            <option value="120">2 minutes</option>
+            <option value="300">5 minutes</option>
+            <option value="600">10 minutes</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="primary" id="saveBtn">Save to playlist</button></div>
+    </section>
 
-  <section id="admin" class="hidden">
-    <h2>Admin</h2>
-    <div class="row">
-      <button class="ghost" id="skip">Next in playlist</button>
-      <button class="ghost" id="off">Lights off</button>
-    </div>
-  </section>
+    <section>
+      <h2>Preview</h2>
+      <canvas id="preview" height="10"></canvas>
+    </section>
+
+    <section class="admin-only hidden">
+      <h2>Admin</h2>
+      <div class="row">
+        <button class="ghost" id="skip">Next in playlist</button>
+        <button class="ghost" id="off">Lights off</button>
+      </div>
+    </section>
   </div>
 
+  <!-- ===== Playlist ===== -->
   <div class="tab hidden" id="tab-playlist" role="tabpanel">
-    <section>
+    <section id="plView">
       <h2>Playlist <span class="meta" id="plMeta"></span></h2>
       <ol class="pl" id="playlist"></ol>
       <p class="empty hidden" id="plIdle">Nothing is playing right now.</p>
+      <div class="row admin-only hidden" style="margin-top:12px"><button class="ghost" id="plEditBtn">Edit playlist</button></div>
+    </section>
+
+    <section id="plEdit" class="hidden">
+      <h2>Edit playlist</h2>
+      <label class="toggle"><input type="checkbox" id="plShuffle"> Shuffle the order each round</label>
+      <div class="edit-list" id="plEditList"></div>
+      <div class="fields" style="margin-top:12px">
+        <label class="field">Add an xLights sequence
+          <select id="plAddFile"></select>
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="ghost" id="plAddFileBtn">Add sequence</button></div>
+      <p class="help" style="margin-top:10px">To add a live effect, set it up on the Controls tab and use “Save to playlist”.</p>
+      <div class="save-bar" style="margin-top:14px">
+        <span>Editing playlist</span>
+        <button class="ghost" id="plCancel">Cancel</button>
+        <button class="primary" id="plSave">Save</button>
+      </div>
     </section>
   </div>
+
+  <!-- ===== Schedule ===== -->
+  <div class="tab hidden" id="tab-schedule" role="tabpanel">
+    <section>
+      <h2>Right now</h2>
+      <p class="sched-now" id="schedNow">…</p>
+    </section>
+    <section>
+      <h2>Show times</h2>
+      <div class="edit-list" id="schedList"></div>
+      <p class="empty hidden" id="schedEmpty">No show times — the lights won't come on by themselves.</p>
+      <div class="row admin-only hidden" style="margin-top:12px"><button class="ghost" id="schedAdd">Add show time</button></div>
+    </section>
+    <div class="save-bar hidden" id="schedSaveBar">
+      <span>Unsaved changes</span>
+      <button class="ghost" id="schedRevert">Revert</button>
+      <button class="primary" id="schedSave">Save</button>
+    </div>
+  </div>
+
+  <!-- ===== Unlock (shown when a PIN is configured and this device doesn't have it) ===== -->
+  <section id="unlock" class="hidden">
+    <h2>Editing is locked</h2>
+    <p class="help">Enter the admin PIN to change the playlist, schedule and admin controls on this device.</p>
+    <div class="row" style="margin-top:10px">
+      <input class="text" id="pin" type="password" autocomplete="off" placeholder="Admin PIN" aria-label="Admin PIN">
+      <button class="primary" id="unlockBtn" style="flex:0 0 auto">Unlock</button>
+    </div>
+  </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const MAX_COLORS = 16;
+const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 const state = { effect: "chase", colors: ["#400080", "#FF3000"], speed: 40, band: 8, brightness: 100 };
-let presets = {}, dirty = false, sendTimer = null, lastEdit = 0, isAdmin = false, tab = "controls";
+let presets = {}, dirty = false, sendTimer = null, lastEdit = 0, isAdmin = false, tokenRequired = false, tab = "controls";
+
+// ---------- storage (per device; may be unavailable) ----------
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} },
+};
 
 async function api(path, body) {
-  const opts = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const headers = { "Content-Type": "application/json" };
+  const token = store.get("hl_token");
+  if (token) headers["X-Api-Token"] = token;
+  const opts = body === undefined ? { headers } : { method: "POST", headers, body: JSON.stringify(body) };
   const r = await fetch(path, opts);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || r.statusText);
   return data;
 }
 
-function say(text) { $("msg").textContent = text || ""; }
+let msgTimer = null;
+function say(text, ok = false) {
+  const m = $("msg");
+  m.textContent = text || "";
+  m.classList.toggle("ok", ok);
+  clearTimeout(msgTimer);
+  if (ok && text) msgTimer = setTimeout(() => say(""), 4000);
+}
 
+const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const fmtLength = s => s < 60 ? `${s} s` : (s % 60 ? fmtTime(s) : `${s / 60} min`);
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+function el(tag, props = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k in e) e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  e.append(...children.filter(c => c !== null && c !== undefined));
+  return e;
+}
+function dotsFor(colors) { return el("span", { class: "dots" }, ...colors.map(c => { const i = el("i"); i.style.background = c; return i; })); }
+
+// ---------- admin / unlock ----------
+function applyAdmin() {
+  document.querySelectorAll(".admin-only").forEach(n => n.classList.toggle("hidden", !isAdmin));
+  $("unlock").classList.toggle("hidden", isAdmin || !tokenRequired || tab === "controls");
+}
+
+$("unlockBtn").addEventListener("click", async () => {
+  store.set("hl_token", $("pin").value.trim());
+  const opts = await api("/api/options").catch(() => null);
+  if (opts && opts.admin) {
+    isAdmin = true; $("pin").value = ""; say("Unlocked", true);
+    plKey = ""; loadPlaylist(); loadSchedule(true);
+  } else { store.set("hl_token", ""); say("That PIN didn't work"); }
+  applyAdmin();
+});
+
+// ---------- tabs ----------
+const TABS = ["controls", "playlist", "schedule"];
+function showTab(name) {
+  if (!TABS.includes(name)) name = "controls";
+  tab = name;
+  for (const t of TABS) {
+    $("tab-" + t).classList.toggle("hidden", t !== name);
+    $("tabBtn-" + t).setAttribute("aria-selected", String(t === name));
+  }
+  history.replaceState(null, "", name === "controls" ? location.pathname : "#" + name);
+  applyAdmin();
+  if (name === "playlist") loadPlaylist();
+  if (name === "schedule") loadSchedule();
+}
+TABS.forEach(t => $("tabBtn-" + t).addEventListener("click", () => showTab(t)));
+addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+
+// ---------- controls ----------
 function renderSwatches() {
   const box = $("swatches");
   box.querySelectorAll(".swatch").forEach(n => n.remove());
   state.colors.forEach((c, i) => {
-    const wrap = document.createElement("div");
-    wrap.className = "swatch";
-    const input = document.createElement("input");
-    input.type = "color";
-    input.value = c.toLowerCase();
-    input.setAttribute("aria-label", `Color ${i + 1}`);
+    const input = el("input", { type: "color", value: c.toLowerCase(), "aria-label": `Color ${i + 1}` });
     input.addEventListener("input", () => { state.colors[i] = input.value.toUpperCase(); edited(); });
-    wrap.append(input);
-    box.insertBefore(wrap, $("removeColor"));
+    box.insertBefore(el("div", { class: "swatch" }, input), $("removeColor"));
   });
   $("removeColor").disabled = state.colors.length <= 1;
   $("addColor").disabled = state.colors.length >= MAX_COLORS;
   markPreset();
 }
 
+function presetName() {
+  const key = state.colors.join(",");
+  return Object.keys(presets).find(n => presets[n].join(",") === key) || "";
+}
 function markPreset() {
   const key = state.colors.join(",");
   document.querySelectorAll(".preset").forEach(b => b.classList.toggle("active", b.dataset.colors === key));
 }
 
 function renderEffects(list) {
-  const box = $("effects");
-  box.innerHTML = "";
-  list.forEach(name => {
-    const b = document.createElement("button");
-    b.textContent = name;
-    b.dataset.effect = name;
-    b.addEventListener("click", () => { state.effect = name; markEffect(); edited(); });
-    box.append(b);
-  });
+  $("effects").replaceChildren(...list.map(name => el("button", {
+    textContent: name, "data-effect": name,
+    onclick: () => { state.effect = name; markEffect(); edited(); },
+  })));
   markEffect();
 }
-
 function markEffect() {
   document.querySelectorAll("#effects button").forEach(b => b.classList.toggle("active", b.dataset.effect === state.effect));
   $("bandRow").classList.toggle("hidden", state.effect !== "chase");
 }
 
 function renderPresets() {
-  const box = $("presets");
-  box.innerHTML = "";
-  Object.entries(presets).forEach(([name, colors]) => {
-    const b = document.createElement("button");
-    b.className = "preset";
-    b.dataset.colors = colors.join(",");
+  $("presets").replaceChildren(...Object.entries(presets).map(([name, colors]) => {
     const stops = colors.length === 1 ? `${colors[0]},${colors[0]}` : colors.join(",");
-    b.innerHTML = `<div class="bar" style="background:linear-gradient(90deg,${stops})"></div><span></span>`;
-    b.querySelector("span").textContent = name;
-    b.addEventListener("click", () => { state.colors = [...colors]; renderSwatches(); edited(); });
-    box.append(b);
-  });
+    const bar = el("div", { class: "bar" });
+    bar.style.background = `linear-gradient(90deg,${stops})`;
+    return el("button", {
+      class: "preset", "data-colors": colors.join(","),
+      onclick: () => { state.colors = [...colors]; renderSwatches(); edited(); },
+    }, bar, el("span", { textContent: name }));
+  }));
   markPreset();
 }
 
@@ -214,11 +370,8 @@ function edited() {
 
 async function send() {
   dirty = false;
-  try {
-    const s = await api("/api/live", { ...state, brightness: state.brightness / 100 });
-    showStatus(s);
-    say("");
-  } catch (e) { say(e.message); }
+  try { showStatus(await api("/api/live", { ...state, brightness: state.brightness / 100 })); say(""); }
+  catch (e) { say(e.message); }
 }
 
 function showStatus(s) {
@@ -229,7 +382,6 @@ function showStatus(s) {
   $("statusText").textContent = text;
   $("statusDot").className = "dot " + s.mode;
   $("resume").classList.toggle("hidden", s.mode !== "live" && s.mode !== "off");
-  // Take settings from the server unless the user is mid-edit on this device.
   if (!dirty && Date.now() - lastEdit > 3000 && s.live) {
     Object.assign(state, { effect: s.live.effect, colors: s.live.colors, speed: s.live.speed, band: s.live.band, brightness: s.brightness * 100 });
     renderSwatches(); markEffect(); syncSliders();
@@ -237,126 +389,8 @@ function showStatus(s) {
 }
 
 async function poll() {
-  try { showStatus(await api("/api/status")); } catch (e) { $("statusText").textContent = "Can't reach the player"; $("statusDot").className = "dot"; }
-}
-
-function showTab(name) {
-  tab = name;
-  for (const t of ["controls", "playlist"]) {
-    $("tab-" + t).classList.toggle("hidden", t !== name);
-    $("tabBtn-" + t).setAttribute("aria-selected", String(t === name));
-  }
-  history.replaceState(null, "", name === "playlist" ? "#playlist" : location.pathname);
-  if (name === "playlist") loadPlaylist();
-}
-
-const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
-function badge(text, cls = "") {
-  const b = document.createElement("span");
-  b.className = "badge " + cls;
-  b.textContent = text;
-  return b;
-}
-
-// Rebuilding the list every poll would replace buttons under the user's finger,
-// so only rebuild when the shape changes; otherwise just move the clock and bar.
-let plKey = "", plProgress = null;
-
-async function loadPlaylist() {
-  if (document.hidden || tab !== "playlist") return;
-  let pl;
-  try { pl = await api("/api/playlist"); } catch { return; }
-  const key = JSON.stringify([pl.items, pl.current, pl.paused, pl.next, isAdmin]);
-  if (key === plKey) {
-    if (plProgress) plProgress(pl.position);
-    return;
-  }
-  plKey = key;
-  plProgress = null;
-  const total = pl.items.reduce((a, i) => a + i.seconds, 0);
-  $("plMeta").textContent = `${pl.items.length} items · ${fmtTime(total)}${pl.shuffle ? " · shuffled" : ""}`;
-  $("plIdle").classList.toggle("hidden", pl.current !== null);
-  const list = $("playlist");
-  list.innerHTML = "";
-  pl.items.forEach(item => {
-    const li = document.createElement("li");
-    const isCurrent = item.index === pl.current;
-    li.classList.toggle("current", isCurrent);
-
-    const num = document.createElement("span");
-    num.className = "num";
-    num.textContent = isCurrent ? (pl.paused ? "❚❚" : "▶") : item.index + 1;
-
-    const body = document.createElement("div");
-    const name = document.createElement("div");
-    name.className = "name";
-    name.textContent = item.name;
-    const sub = document.createElement("div");
-    sub.className = "sub";
-    const kind = item.type === "fseq" ? "Sequence" : "Live effect";
-    const time = document.createElement("span");
-    time.textContent = `${kind} · ${fmtTime(item.seconds)}`;
-    sub.append(time);
-    if (item.colors) {
-      const dots = document.createElement("span");
-      dots.className = "dots";
-      item.colors.forEach(c => { const d = document.createElement("i"); d.style.background = c; dots.append(d); });
-      sub.append(dots);
-    }
-    body.append(name, sub);
-
-    let right = document.createElement("span");
-    if (isCurrent) {
-      right = badge(pl.paused ? "Paused" : "Playing", "playing");
-    } else if (isAdmin) {
-      right = document.createElement("button");
-      right.className = "ghost play";
-      right.textContent = "Play";
-      right.setAttribute("aria-label", "Play " + name.textContent + " now");
-      right.addEventListener("click", async () => {
-        try { showStatus(await api("/api/play", { index: item.index })); say(""); plKey = ""; loadPlaylist(); } catch (e) { say(e.message); }
-      });
-      if (item.index === pl.next) sub.append(badge("Up next"));
-    } else if (item.index === pl.next) {
-      right = badge("Up next");
-    }
-    li.append(num, body, right);
-
-    if (isCurrent) {
-      const bar = document.createElement("div");
-      bar.className = "bar";
-      li.append(bar);
-      plProgress = position => {
-        time.textContent = `${kind} · ${fmtTime(Math.min(position, item.seconds))} / ${fmtTime(item.seconds)}`;
-        bar.style.width = `${Math.min(100, 100 * position / item.seconds)}%`;
-      };
-      plProgress(pl.position);
-    }
-    list.append(li);
-  });
-}
-
-// Preview: one row per model, pixels scaled to the canvas width.
-async function drawPreview() {
-  if (document.hidden || tab !== "controls") return;
-  let data;
-  try { data = await api("/api/preview"); } catch { return; }
-  const cv = $("preview"), ctx = cv.getContext("2d");
-  const rowH = 10, gap = 4;
-  const w = cv.clientWidth * devicePixelRatio;
-  cv.width = w;
-  cv.height = (data.models.length * (rowH + gap)) * devicePixelRatio;
-  ctx.scale(devicePixelRatio, devicePixelRatio);
-  const cw = cv.clientWidth;
-  data.models.forEach((m, row) => {
-    const n = m.rgb.length / 6;
-    const px = cw / n;
-    for (let i = 0; i < n; i++) {
-      ctx.fillStyle = "#" + m.rgb.substr(i * 6, 6);
-      ctx.fillRect(i * px, row * (rowH + gap), Math.max(1, px - (px > 3 ? 1 : 0)), rowH);
-    }
-  });
+  try { showStatus(await api("/api/status")); }
+  catch { $("statusText").textContent = "Can't reach the player"; $("statusDot").className = "dot"; }
 }
 
 $("addColor").addEventListener("click", () => { state.colors.push(state.colors[state.colors.length - 1]); renderSwatches(); edited(); });
@@ -367,25 +401,284 @@ for (const k of ["speed", "band", "brightness"]) {
 $("resume").addEventListener("click", async () => { try { showStatus(await api("/api/resume", {})); lastEdit = 0; } catch (e) { say(e.message); } });
 $("skip").addEventListener("click", async () => { try { showStatus(await api("/api/skip", {})); } catch (e) { say(e.message); } });
 $("off").addEventListener("click", async () => { try { showStatus(await api("/api/off", {})); } catch (e) { say(e.message); } });
-$("tabBtn-controls").addEventListener("click", () => showTab("controls"));
-$("tabBtn-playlist").addEventListener("click", () => showTab("playlist"));
 
+$("saveBtn").addEventListener("click", async () => {
+  const name = $("saveName").value.trim() || [presetName(), cap(state.effect)].filter(Boolean).join(" ");
+  try {
+    await api("/api/playlist/add", {
+      name, effect: state.effect, colors: state.colors, speed: state.speed, band: state.band,
+      brightness: state.brightness, seconds: Number($("saveSeconds").value),
+    });
+    $("saveName").value = "";
+    plKey = "";
+    say(`Saved “${name}” to the playlist`, true);
+  } catch (e) { say(e.message); }
+});
+
+// Preview: one row per model, pixels scaled to the canvas width.
+async function drawPreview() {
+  if (document.hidden || tab !== "controls") return;
+  let data;
+  try { data = await api("/api/preview"); } catch { return; }
+  const cv = $("preview"), ctx = cv.getContext("2d");
+  const rowH = 10, gap = 4, cw = cv.clientWidth;
+  cv.width = cw * devicePixelRatio;
+  cv.height = data.models.length * (rowH + gap) * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  data.models.forEach((m, row) => {
+    const n = m.rgb.length / 6, px = cw / n;
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = "#" + m.rgb.substr(i * 6, 6);
+      ctx.fillRect(i * px, row * (rowH + gap), Math.max(1, px - (px > 3 ? 1 : 0)), rowH);
+    }
+  });
+}
+
+// ---------- playlist (view) ----------
+// Rebuilding the list every poll would replace buttons under the user's finger,
+// so only rebuild when the shape changes; otherwise just move the clock and bar.
+let plKey = "", plProgress = null, plData = null, plEditing = false;
+
+function itemLength(item) { return item.type === "fseq" ? `${fmtTime(item.seconds)}${item.loops > 1 ? ` × ${item.loops}` : ""}` : fmtLength(item.seconds); }
+
+async function loadPlaylist() {
+  if (document.hidden || tab !== "playlist" || plEditing) return;
+  let pl;
+  try { pl = await api("/api/playlist"); } catch { return; }
+  plData = pl;
+  const key = JSON.stringify([pl.items, pl.current, pl.paused, pl.next, isAdmin]);
+  if (key === plKey) { if (plProgress) plProgress(pl.position); return; }
+  plKey = key;
+  plProgress = null;
+  const total = pl.items.reduce((a, i) => a + i.seconds, 0);
+  $("plMeta").textContent = `${pl.items.length} items · ${fmtTime(total)}${pl.shuffle ? " · shuffled" : ""}`;
+  $("plIdle").classList.toggle("hidden", pl.current !== null);
+  $("playlist").replaceChildren(...pl.items.map(item => {
+    const isCurrent = item.index === pl.current;
+    const kind = item.type === "fseq" ? "Sequence" : cap(item.effect);
+    const time = el("span", { textContent: `${kind} · ${itemLength(item)}` });
+    const sub = el("div", { class: "sub" }, time, item.colors ? dotsFor(item.colors) : null,
+      item.brightness < 100 ? el("span", { textContent: `· ${item.brightness}%` }) : null);
+    let right = el("span");
+    if (isCurrent) right = el("span", { class: "badge playing", textContent: pl.paused ? "Paused" : "Playing" });
+    else if (isAdmin) {
+      right = el("button", {
+        class: "ghost play", textContent: "Play", "aria-label": `Play ${item.name} now`,
+        onclick: async () => { try { showStatus(await api("/api/play", { index: item.index })); say(""); plKey = ""; loadPlaylist(); } catch (e) { say(e.message); } },
+      });
+      if (item.index === pl.next) sub.append(el("span", { class: "badge", textContent: "Up next" }));
+    } else if (item.index === pl.next) right = el("span", { class: "badge", textContent: "Up next" });
+    const li = el("li", { class: isCurrent ? "current" : "" },
+      el("span", { class: "num", textContent: isCurrent ? (pl.paused ? "❚❚" : "▶") : item.index + 1 }),
+      el("div", {}, el("div", { class: "name", textContent: item.name }), sub), right);
+    if (isCurrent) {
+      const bar = el("div", { class: "bar" });
+      li.append(bar);
+      plProgress = position => {
+        time.textContent = `${kind} · ${fmtTime(Math.min(position, item.seconds))} / ${fmtTime(item.seconds)}`;
+        bar.style.width = `${Math.min(100, 100 * position / item.seconds)}%`;
+      };
+      plProgress(pl.position);
+    }
+    return li;
+  }));
+}
+
+// ---------- playlist (edit) ----------
+let plDraft = [];
+const EDIT_FIELDS = ["id", "name", "type", "file", "loops", "effect", "seconds", "colors", "speed", "band", "brightness"];
+
+async function startPlaylistEdit() {
+  const pl = await api("/api/playlist").catch(e => { say(e.message); return null; });
+  if (!pl) return;
+  plDraft = pl.items.map(i => Object.fromEntries(EDIT_FIELDS.filter(k => k in i).map(k => [k, i[k]])));
+  $("plShuffle").checked = pl.shuffle;
+  const files = await api("/api/sequences").then(d => d.files).catch(() => []);
+  $("plAddFile").replaceChildren(...files.map(f => el("option", { value: f, textContent: f.replace(/\.fseq$/i, "") })));
+  $("plAddFileBtn").disabled = !files.length;
+  plEditing = true;
+  $("plView").classList.add("hidden");
+  $("plEdit").classList.remove("hidden");
+  renderPlaylistEdit();
+}
+
+function endPlaylistEdit() {
+  plEditing = false; plKey = "";
+  $("plEdit").classList.add("hidden");
+  $("plView").classList.remove("hidden");
+  loadPlaylist();
+}
+
+function renderPlaylistEdit() {
+  const list = $("plEditList");
+  if (!plDraft.length) { list.replaceChildren(el("p", { class: "empty", textContent: "The playlist is empty." })); return; }
+  list.replaceChildren(...plDraft.map((item, i) => {
+    const move = (d) => { const j = i + d; [plDraft[i], plDraft[j]] = [plDraft[j], plDraft[i]]; renderPlaylistEdit(); };
+    const name = el("input", { class: "text", value: item.name, maxLength: 60, "aria-label": "Name" });
+    name.addEventListener("input", () => { item.name = name.value; });
+    const head = el("div", { class: "head" },
+      name,
+      el("button", { class: "icon", textContent: "↑", "aria-label": "Move up", disabled: i === 0, onclick: () => move(-1) }),
+      el("button", { class: "icon", textContent: "↓", "aria-label": "Move down", disabled: i === plDraft.length - 1, onclick: () => move(1) }),
+      el("button", { class: "icon danger", textContent: "✕", "aria-label": `Remove ${item.name}`, onclick: () => { plDraft.splice(i, 1); renderPlaylistEdit(); } }));
+
+    const fields = el("div", { class: "fields" });
+    if (item.type === "fseq") {
+      const loops = el("input", { type: "number", min: 1, max: 99, value: item.loops || 1 });
+      loops.addEventListener("input", () => { item.loops = Math.max(1, Number(loops.value) || 1); });
+      fields.append(el("label", { class: "field" }, "Sequence", el("input", { value: item.file, disabled: true })),
+                    el("label", { class: "field" }, "Play times", loops));
+    } else {
+      const secs = el("input", { type: "number", min: 5, max: 3600, step: 5, value: item.seconds });
+      secs.addEventListener("input", () => { item.seconds = Math.max(1, Number(secs.value) || 60); });
+      const speed = el("input", { type: "number", min: 1, max: 100, value: item.speed });
+      speed.addEventListener("input", () => { item.speed = Math.min(100, Math.max(1, Number(speed.value) || 40)); });
+      fields.append(el("label", { class: "field" }, "Seconds", secs), el("label", { class: "field" }, "Speed", speed));
+    }
+    const bright = el("input", { type: "number", min: 5, max: 100, step: 5, value: item.brightness });
+    bright.addEventListener("input", () => { item.brightness = Math.min(100, Math.max(5, Number(bright.value) || 100)); });
+    fields.append(el("label", { class: "field" }, "Brightness %", bright));
+    const info = el("div", { class: "pl" }, el("div", { class: "sub" },
+      el("span", { textContent: item.type === "fseq" ? "xLights sequence" : `${cap(item.effect)} effect` }),
+      item.colors ? dotsFor(item.colors) : null));
+    return el("div", { class: "edit-item" }, head, info, fields);
+  }));
+}
+
+$("plEditBtn").addEventListener("click", startPlaylistEdit);
+$("plCancel").addEventListener("click", endPlaylistEdit);
+$("plAddFileBtn").addEventListener("click", () => {
+  const f = $("plAddFile").value;
+  if (!f) return;
+  plDraft.push({ type: "fseq", file: f, name: f.replace(/\.fseq$/i, ""), loops: 1, brightness: 100 });
+  renderPlaylistEdit();
+});
+$("plSave").addEventListener("click", async () => {
+  try {
+    await api("/api/playlist", { items: plDraft, shuffle: $("plShuffle").checked });
+    say("Playlist saved", true);
+    endPlaylistEdit();
+  } catch (e) { say(e.message); }
+});
+
+// ---------- schedule ----------
+let schedDraft = [], schedDirty = false, schedData = null, schedKey = "";
+
+function fmtWhen(iso) {
+  const d = new Date(iso), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) return `today at ${time}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `tomorrow at ${time}`;
+  return `${d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} at ${time}`;
+}
+const fmtClock = hhmm => { const [h, m] = hhmm.split(":").map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); };
+
+function windowSummary(w) {
+  const days = w.days.length === 7 ? "Every day" : w.days.map(d => cap(d)).join(", ");
+  const overnight = w.end <= w.start ? " (next day)" : "";
+  let s = `${days}, ${fmtClock(w.start)} – ${fmtClock(w.end)}${overnight}`;
+  if (w.from || w.to) s += ` · ${w.from || "…"} to ${w.to || "…"}`;
+  return s;
+}
+
+async function loadSchedule(force = false) {
+  if (document.hidden || tab !== "schedule") return;
+  let s;
+  try { s = await api("/api/schedule"); } catch { return; }
+  schedData = s;
+  $("schedNow").textContent = s.in_window
+    ? `Show is on until ${fmtClock(s.window_end.slice(11, 16))}`
+    : s.next_start ? `Next show ${fmtWhen(s.next_start)}` : "No upcoming shows";
+  // Only rebuild when the saved schedule changed (or on request) so inputs aren't replaced mid-tap.
+  const key = JSON.stringify([s.windows, isAdmin]);
+  if (force || (!schedDirty && key !== schedKey)) {
+    schedKey = key;
+    schedDraft = s.windows.map(w => ({ ...w, days: [...w.days] }));
+    schedDirty = false;
+    renderSchedule();
+  }
+}
+
+function markSchedDirty() { schedDirty = true; $("schedSaveBar").classList.remove("hidden"); }
+
+function renderSchedule() {
+  $("schedSaveBar").classList.toggle("hidden", !schedDirty);
+  $("schedEmpty").classList.toggle("hidden", schedDraft.length > 0);
+  $("schedList").replaceChildren(...schedDraft.map((w, i) => {
+    if (!isAdmin) {
+      return el("div", { class: "win" + (w.enabled ? "" : " off") },
+        el("div", { class: "win-summary", textContent: windowSummary(w) }),
+        w.enabled ? null : el("div", { class: "help", textContent: "Turned off" }));
+    }
+    const summary = el("div", { class: "win-summary", textContent: windowSummary(w) });
+    const refresh = () => { summary.textContent = windowSummary(w); card.classList.toggle("off", !w.enabled); markSchedDirty(); };
+    const enabled = el("input", { type: "checkbox", checked: w.enabled });
+    enabled.addEventListener("change", () => { w.enabled = enabled.checked; refresh(); });
+    const days = el("div", { class: "days", role: "group", "aria-label": "Days" }, ...DAYS.map((d, k) => {
+      const b = el("button", { textContent: DAY_LETTERS[k], "aria-label": cap(d), "aria-pressed": String(w.days.includes(d)) });
+      b.addEventListener("click", () => {
+        w.days = w.days.includes(d) ? w.days.filter(x => x !== d) : DAYS.filter(x => x === d || w.days.includes(x));
+        b.setAttribute("aria-pressed", String(w.days.includes(d)));
+        refresh();
+      });
+      return b;
+    }));
+    const timeInput = (key, label) => {
+      const inp = el("input", { type: "time", value: w[key], required: true });
+      inp.addEventListener("change", () => { if (inp.value) { w[key] = inp.value; refresh(); } });
+      return el("label", { class: "field" }, label, inp);
+    };
+    const dateInput = (key, label) => {
+      const inp = el("input", { type: "date", value: w[key] || "" });
+      inp.addEventListener("change", () => { w[key] = inp.value || null; refresh(); });
+      return el("label", { class: "field" }, label, inp);
+    };
+    const card = el("div", { class: "win" + (w.enabled ? "" : " off") },
+      el("div", { class: "head", style: "display:flex;align-items:center;gap:8px" },
+        el("label", { class: "toggle", style: "flex:1" }, enabled, summary),
+        el("button", { class: "icon danger", textContent: "✕", "aria-label": "Delete this show time",
+          onclick: () => { schedDraft.splice(i, 1); markSchedDirty(); renderSchedule(); } })),
+      days,
+      el("div", { class: "fields" }, timeInput("start", "Lights on"), timeInput("end", "Lights off")),
+      el("div", { class: "fields" }, dateInput("from", "Starting (optional)"), dateInput("to", "Ending (optional)")));
+    return card;
+  }));
+}
+
+$("schedAdd").addEventListener("click", () => {
+  schedDraft.push({ days: [...DAYS], start: "17:00", end: "23:00", enabled: true, from: null, to: null });
+  markSchedDirty(); renderSchedule();
+});
+$("schedRevert").addEventListener("click", () => { schedDirty = false; loadSchedule(true); });
+$("schedSave").addEventListener("click", async () => {
+  const bad = schedDraft.find(w => !w.days.length);
+  if (bad) return say("Each show time needs at least one day");
+  try {
+    await api("/api/schedule", { windows: schedDraft });
+    schedDirty = false;
+    say("Schedule saved", true);
+    loadSchedule(true);
+  } catch (e) { say(e.message); }
+});
+
+// ---------- start ----------
 (async function init() {
   try {
     const opts = await api("/api/options");
     presets = opts.presets;
+    isAdmin = opts.admin;
+    tokenRequired = opts.token_required;
     renderEffects(opts.effects);
     renderPresets();
-    isAdmin = opts.admin;
-    $("admin").classList.toggle("hidden", !opts.admin);
   } catch (e) { say(e.message); }
   renderSwatches(); syncSliders();
+  showTab(location.hash.slice(1));
   await poll();
   setInterval(poll, 2000);
   setInterval(drawPreview, 250);
   setInterval(loadPlaylist, 1000);
-  if (location.hash === "#playlist") showTab("playlist");
-  addEventListener("hashchange", () => showTab(location.hash === "#playlist" ? "playlist" : "controls"));
+  setInterval(() => loadSchedule(), 5000);
 })();
 </script>
 </body>

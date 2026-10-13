@@ -49,6 +49,7 @@ def make_player(tmp_path, when="2026-10-12T18:00:00", **extra):
         ],
         "live": {"effect": "solid", "colors": ["#FF3000"]},
         "override_minutes": 1,
+        "state_file": str(tmp_path / "show.json"),
     }
     raw.update(extra)
     clock = Clock(when)
@@ -241,3 +242,105 @@ def test_api_playlist_and_play(api):
     assert call("/api/play", {"index": 1}, token="sekret")[0] == 200
     assert call("/api/playlist")[1]["current"] == 1
     assert call("/api/play", {"index": 9}, token="sekret")[0] == 400
+
+
+# ---- schedule details ----
+
+def test_window_dates_enabled_and_next_start():
+    from houselights.config import parse_config
+
+    cfg = parse_config({"windows": [
+        {"days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "start": "17:00", "end": "23:00",
+         "from": "2026-10-01", "to": "2026-10-31"},
+        {"days": ["sat"], "start": "10:00", "end": "11:00", "enabled": False},
+    ]})
+    assert cfg.in_window(datetime(2026, 10, 31, 18, 0))
+    assert not cfg.in_window(datetime(2026, 11, 1, 18, 0))  # season over
+    assert not cfg.in_window(datetime(2026, 10, 17, 10, 30))  # disabled window
+    assert cfg.next_start(datetime(2026, 10, 12, 18, 0)) == datetime(2026, 10, 13, 17, 0)
+    assert cfg.next_start(datetime(2026, 10, 31, 23, 30)) is None
+    assert cfg.next_start(datetime(2026, 9, 1, 12, 0)) == datetime(2026, 10, 1, 17, 0)
+
+
+def test_state_file_round_trip_overrides_toml(tmp_path):
+    from houselights.config import load_config
+
+    write_fseq(tmp_path / "a.fseq", 12, [bytes(12)])
+    (tmp_path / "config.toml").write_text(
+        f"show_dir = '{tmp_path}'\n"
+        "[[windows]]\nstart = '16:50'\nend = '23:15'\n"
+        "[[playlist]]\ntype = 'fseq'\nfile = 'a.fseq'\n"
+    )
+    cfg = load_config(tmp_path / "config.toml")
+    assert cfg.state_file == tmp_path / "show.json" and not cfg.state_file.exists()
+    player = Player(cfg, tiny_layout(), NullOutput())
+    player.update_show(windows=[], shuffle=True)
+    again = load_config(tmp_path / "config.toml")
+    assert again.windows == [] and again.shuffle is True
+    assert [i.describe() for i in again.playlist] == ["a"]
+    assert again.playlist[0].id == cfg.playlist[0].id
+
+
+def test_update_show_keeps_the_current_item_playing(tmp_path):
+    from houselights.config import parse_item
+
+    player, _ = make_player(tmp_path)
+    player.tick(0.0)  # playing item 0 (a.fseq)
+    a, solid = player.config.playlist
+    new = parse_item({"type": "effect", "effect": "solid", "colors": ["#FF3000"], "seconds": 5}, tmp_path)
+    player.update_show(playlist=[solid, new, a])
+    assert player.playlist(0.01)["current"] == 2  # still a.fseq, now at index 2
+    assert pixels(player.tick(0.06))[0] == (2, 2, 2)  # carried on, no restart
+    player.update_show(playlist=[solid, new])  # remove what's playing
+    assert player.playlist(0.07)["current"] is None
+    assert pixels(player.tick(0.2))[0] == PURPLE  # when it ends, playlist starts from the top
+
+
+def test_api_edit_playlist_schedule_and_add(api, tmp_path):
+    call, player, _ = api
+    player.tick(0.0)
+    tok = "sekret"
+    items = call("/api/playlist")[1]["items"]
+    assert items[0]["file"] == "a.fseq" and items[1]["effect"] == "solid" and items[1]["brightness"] == 100
+    edited = [dict(items[1], name="Purple", seconds=20, brightness=50), items[0]]
+    code, pl = call("/api/playlist", {"items": edited, "shuffle": False}, token=tok)
+    assert code == 200 and [i["name"] for i in pl["items"]] == ["Purple", "a"]
+    assert pl["items"][0]["seconds"] == 20 and pl["items"][0]["brightness"] == 50
+
+    code, pl = call("/api/playlist/add", {"name": "Witchy", "effect": "twinkle", "colors": ["#400080", "#00C000"],
+                                          "seconds": 120, "speed": 100, "brightness": 100}, token=tok)
+    assert code == 200 and pl["items"][-1]["name"] == "Witchy" and pl["items"][-1]["speed"] == 100
+
+    code, sched = call("/api/schedule", {"windows": [{"days": ["fri", "sat"], "start": "18:00", "end": "01:00",
+                                                       "from": "2026-12-01", "to": None}]}, token=tok)
+    assert code == 200 and sched["windows"][0]["days"] == ["fri", "sat"] and sched["windows"][0]["from"] == "2026-12-01"
+
+    import json as _json
+    saved = _json.loads((tmp_path / "show.json").read_text())
+    assert [i["name"] for i in saved["playlist"]] == ["Purple", "a", "Witchy"]
+    assert saved["windows"][0]["end"] == "01:00"
+
+
+def test_api_edit_rejects_bad_input_and_needs_admin(api):
+    call, _, _ = api
+    tok = "sekret"
+    assert call("/api/schedule", {"windows": []})[0] == 403
+    assert call("/api/playlist", {"items": [{"type": "fseq", "file": "../../secret.fseq"}]}, token=tok)[0] == 400
+    assert call("/api/playlist", {"items": [{"type": "fseq", "file": "missing.fseq"}]}, token=tok)[0] == 400
+    assert call("/api/playlist", {"items": [{"type": "effect", "effect": "lasers"}]}, token=tok)[0] == 400
+    assert call("/api/schedule", {"windows": [{"days": [], "start": "18:00", "end": "19:00"}]}, token=tok)[0] == 400
+    assert call("/api/schedule", {"windows": [{"days": ["mon"], "start": "25:00", "end": "19:00"}]}, token=tok)[0] == 400
+    assert call("/api/playlist")[1]["items"][0]["name"] == "a"  # nothing changed
+
+
+def test_api_options_reports_admin_per_caller_and_lists_sequences(api):
+    call, _, _ = api
+    assert call("/api/options")[1]["admin"] is False
+    assert call("/api/options", token="sekret")[1]["admin"] is True
+    assert call("/api/sequences")[1]["files"] == ["a.fseq"]
+
+
+def test_api_shutdown_from_localhost_stops_player(api):
+    call, player, _ = api
+    assert call("/api/shutdown", {})[0] == 200
+    assert player._stop.is_set()

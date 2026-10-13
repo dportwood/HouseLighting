@@ -6,6 +6,7 @@
   play   FILE.fseq           play a rendered xLights sequence directly over DDP
   locate --model NAME        light the end of one string in color blocks to find a dead pixel
   serve  --config FILE       run the show: schedule, playlist and the tablet web page
+  control --config FILE      desktop window to start/stop the player and see its status
 """
 
 from __future__ import annotations
@@ -62,9 +63,17 @@ def main(argv: list[str] | None = None) -> None:
     sv.add_argument("--dry-run", action="store_true", help="run everything but don't send to the controllers")
     sv.add_argument("--log", help="append output and errors to this file (for running in the background)")
 
+    ct = sub.add_parser("control")
+    ct.add_argument("--config", default="config.toml")
+
     args = p.parse_args(argv)
     if args.cmd == "serve":
         _serve(args)
+        return
+    if args.cmd == "control":
+        from .control import run
+
+        run(args.config)
         return
     layout = load_layout(args.show_dir)
 
@@ -133,7 +142,7 @@ def _play(out: Output, frame: np.ndarray, path: Path, loops: int) -> None:
 
 
 def _serve(args) -> None:
-    from .config import load_config
+    from .config import load_config, save_state
     from .output import NullOutput
     from .player import Player
     from .server import make_server, serve_in_thread
@@ -143,6 +152,9 @@ def _serve(args) -> None:
         sys.stdout = sys.stderr = open(args.log, "a", encoding="utf-8", buffering=1)
     print(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} starting houselights {__version__} ---")
     cfg = load_config(args.config)
+    if cfg.state_file is not None and not cfg.state_file.exists():
+        save_state(cfg)  # first run: the schedule/playlist from config.toml becomes show.json
+        print(f"Created {cfg.state_file} from {args.config}")
     layout = load_layout(cfg.show_dir)
     out = NullOutput() if args.dry_run else Output(layout, only=args.only, skip=(args.skip or []) + cfg.skip_controllers)
     if args.dry_run:
@@ -164,6 +176,7 @@ def _serve(args) -> None:
         server.shutdown()
         out.send(np.zeros(layout.total_channels, dtype=np.uint8))
         out.close()
+        print(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} stopped ---")
 
 
 def _info(layout) -> None:

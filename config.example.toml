@@ -65,7 +65,8 @@ Rainbow = ["#FF0000", "#FF3400", "#FF6900", "#FFB400", "#B7FF00", "#07FF00", "#0
            "#00C8FF", "#0085FF", "#003EFF", "#1200FF", "#4800FF", "#C100FF", "#FF0083", "#FF002B"]
 
 # Projectors (uncomment with media_dir above):
+# Projectors can also just be added from the page (Projectors -> Scan -> Add).
 # [[projectors]]
-# name = "Projector 1"
-# host = "projector1.local"
+# name = "Projector 1"          # the agent's name; matched when scanning
+# host = "projector1.local"     # optional
 # token = ""

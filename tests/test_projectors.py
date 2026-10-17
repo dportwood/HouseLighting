@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import socket
 import sys
 import threading
 import urllib.error
@@ -11,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from houselights.config import ProjectorConfig, parse_config
-from houselights.projectors import MediaLibrary, ProjectorManager
+from houselights.projectors import AnnouncementListener, MediaLibrary, ProjectorManager, scan
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("hl_projector", ROOT / "projector" / "hl_projector.py")
@@ -105,10 +106,18 @@ def test_library_groups_by_collection_and_version_and_skips_isos(library):
 
 # ---- manager <-> agent ----
 
-def make_manager(tmp_path, port, library, window):
+def free_udp_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def make_manager(tmp_path, port, library, window, projectors=None):
     cfg = parse_config({"show_dir": str(tmp_path), "state_file": str(tmp_path / "show.json")})
-    cfg.projectors = [ProjectorConfig("Front", "127.0.0.1", port, "pitoken")]
-    return ProjectorManager(cfg, library, lambda: window["on"])
+    cfg.projectors = projectors if projectors is not None else [ProjectorConfig("Front", "127.0.0.1", port, "pitoken")]
+    mgr = ProjectorManager(cfg, library, lambda: window["on"])
+    mgr.scan_targets, mgr.scan_port = ["127.0.0.1"], free_udp_port()  # never broadcast onto the real network
+    return mgr
 
 
 def wait_sync(mgr):
@@ -203,7 +212,8 @@ def test_playlist_saved_to_show_json(tmp_path, agent, library):
     mgr = make_manager(tmp_path, port, library, {"on": False})
     mgr.set_playlist(0, ["Loose.mov", "Loose.mov", "Phantasms/Siren.mp4"], shuffle=True)
     saved = json.loads((tmp_path / "show.json").read_text())
-    assert saved["projectors"]["Front"] == {"playlist": ["Loose.mov", "Phantasms/Siren.mp4"], "shuffle": True}
+    assert saved["projectors"]["Front"]["playlist"] == ["Loose.mov", "Phantasms/Siren.mp4"]
+    assert saved["projectors"]["Front"]["shuffle"] is True
     with pytest.raises(ValueError, match="media folder"):
         mgr.set_playlist(0, ["Nope.mp4"], shuffle=False)
 
@@ -217,3 +227,90 @@ def test_plays_the_videos_it_has_while_others_wait_for_a_sync(tmp_path, agent, l
     mgr.poll_once()
     snap = mgr.snapshot()[0]
     assert snap["state"] == "playing" and a.playlist == ["Loose.mov"] and snap["missing"] == ["Phantasms/Siren.mp4"]
+
+
+
+# ---- discovery ----
+
+@pytest.fixture
+def discovering_agent(agent):
+    a, port = agent
+    a.config["port"] = port
+    d = hl.Discovery(a, 0, host="127.0.0.1")
+    d.start(announce=False)
+    yield a, port, d.sock.getsockname()[1]
+    d.close()
+
+
+def test_scan_finds_agent_with_id_name_and_port(discovering_agent):
+    a, http_port, disc_port = discovering_agent
+    found = scan(timeout=0.5, port=disc_port, targets=["127.0.0.1"])
+    assert len(found) == 1
+    f = found[0]
+    assert (f["id"], f["name"], f["port"], f["address"], f["mode"]) == (a.id, "Test projector", http_port, "127.0.0.1", "sync")
+
+
+def test_projector_that_moved_is_found_again_by_name_and_remembered(tmp_path, discovering_agent, library):
+    a, http_port, disc_port = discovering_agent
+    moved = ProjectorConfig("test PROJECTOR", host="", port=1, token="pitoken")  # name matches, old port/no address
+    mgr = make_manager(tmp_path, http_port, library, {"on": False}, projectors=[moved])
+    mgr.scan_port = disc_port
+    mgr.poll_once()  # can't connect -> rescan -> found -> connects in the same poll
+    snap = mgr.snapshot()[0]
+    assert snap["online"] and snap["address"] == "127.0.0.1" and snap["id"] == a.id
+    saved = json.loads((tmp_path / "show.json").read_text())["projectors"]["test PROJECTOR"]
+    assert saved["address"] == "127.0.0.1" and saved["id"] == a.id
+
+
+def test_scan_add_and_remove_from_page(tmp_path, discovering_agent, library):
+    a, http_port, disc_port = discovering_agent
+    mgr = make_manager(tmp_path, http_port, library, {"on": False}, projectors=[])
+    mgr.scan_port = disc_port
+    mgr.scan_now(timeout=0.5)
+    assert [d["name"] for d in mgr.discovered_list()] == ["Test projector"]
+    assert mgr.config.projectors == []
+    mgr.add_discovered(a.id)
+    mgr.config.projectors[0].token = "pitoken"
+    mgr.poll_once()
+    snap = mgr.snapshot()[0]
+    assert snap["online"] and snap["added_from_page"] and mgr.discovered_list()[0]["added"]
+    with pytest.raises(ValueError, match="already added"):
+        mgr.add_discovered(a.id)
+
+    from houselights.config import load_state  # survives a restart via show.json
+    cfg2 = parse_config({"show_dir": str(tmp_path), "state_file": str(tmp_path / "show.json")})
+    load_state(cfg2)
+    assert [(p.name, p.id, p.address, p.added_from_page) for p in cfg2.projectors] == [("Test projector", a.id, "127.0.0.1", True)]
+
+    mgr.remove(0)
+    assert mgr.snapshot() == []
+
+
+def test_config_toml_projectors_cannot_be_removed_from_page(tmp_path, agent, library):
+    _, port = agent
+    mgr = make_manager(tmp_path, port, library, {"on": False})
+    with pytest.raises(ValueError, match="config.toml"):
+        mgr.remove(0)
+
+
+def test_announcement_updates_address(tmp_path, agent, library):
+    a, http_port = agent
+    a.config["port"] = http_port
+    proj = ProjectorConfig("Test projector", port=1)
+    mgr = make_manager(tmp_path, http_port, library, {"on": False}, projectors=[proj])
+    listener = AnnouncementListener(mgr.found, port=0)
+    listener.sock.close()
+    listener.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    listener.sock.bind(("127.0.0.1", 0))
+    listener.start()
+    try:
+        hello = json.dumps({**a.describe(), "event": "hello"}).encode()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.sendto(hello, listener.sock.getsockname())
+        for _ in range(50):
+            if proj.address:
+                break
+            threading.Event().wait(0.05)
+        assert (proj.address, proj.port, proj.id) == ("127.0.0.1", http_port, a.id)
+    finally:
+        listener.close()

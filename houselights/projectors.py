@@ -9,12 +9,19 @@ Each projector Pi runs projector/hl_projector.py. The workflow:
 
 Reordering the playlist outside works as long as the videos are already on the
 projector; new videos need a trip inside to sync.
+
+Finding projectors: a configured host name (projector1.local) is tried first;
+otherwise, or when it fails, the last IP found by discovery. Discovery is a UDP
+broadcast of b"HLPROJECTOR?" on port 8091 that every agent answers; agents also
+announce themselves after boot. A projector that stops answering triggers a
+rescan, so a new DHCP address is picked up within about half a minute.
 """
 
 from __future__ import annotations
 
 import http.client
 import json
+import socket
 import threading
 import time
 import traceback
@@ -29,6 +36,89 @@ POLL_SECONDS = 5
 LIBRARY_REFRESH_SECONDS = 60
 RETRY_SECONDS = 60
 UPLOAD_CHUNK = 1024 * 1024
+DISCOVERY_PORT = 8091
+DISCOVERY_QUERY = b"HLPROJECTOR?"
+RESCAN_SECONDS = 30  # at most this often while a projector isn't answering
+
+
+def broadcast_targets() -> list[str]:
+    """255.255.255.255 plus each local IPv4 network's broadcast (assumed /24), so every adapter is covered."""
+    targets = ["255.255.255.255"]
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                bcast = ip.rsplit(".", 1)[0] + ".255"
+                if bcast not in targets:
+                    targets.append(bcast)
+    except OSError:
+        pass
+    return targets
+
+
+def scan(timeout: float = 1.5, port: int = DISCOVERY_PORT, targets: list[str] | None = None) -> list[dict]:
+    """Broadcast a discovery query and collect the agents that answer, one entry per agent id."""
+    found: dict[str, dict] = {}
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind(("", 0))
+        for t in targets or broadcast_targets():
+            try:
+                sock.sendto(DISCOVERY_QUERY, (t, port))
+            except OSError:
+                pass
+        end = time.monotonic() + timeout
+        while (left := end - time.monotonic()) > 0:
+            sock.settimeout(left)
+            try:
+                data, addr = sock.recvfrom(4096)
+            except (socket.timeout, OSError):
+                break
+            info = _parse_announcement(data, addr[0])
+            if info:
+                found[info["id"]] = info
+    return list(found.values())
+
+
+def _parse_announcement(data: bytes, address: str) -> dict | None:
+    try:
+        info = json.loads(data)
+    except ValueError:
+        return None
+    if not isinstance(info, dict) or info.get("type") != "hl-projector" or not info.get("id"):
+        return None
+    return {"id": str(info["id"]), "name": str(info.get("name", "")), "port": int(info.get("port", 8090)),
+            "mode": info.get("mode"), "version": info.get("version"), "hostname": info.get("hostname"),
+            "address": address}
+
+
+class AnnouncementListener:
+    """Hears the 'hello' broadcasts agents send after they boot."""
+
+    def __init__(self, on_found, port: int = DISCOVERY_PORT):
+        self.on_found = on_found
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("", port))
+
+    def start(self) -> None:
+        threading.Thread(target=self._run, name="announcements", daemon=True).start()
+
+    def close(self) -> None:
+        self.sock.close()
+
+    def _run(self) -> None:
+        while True:
+            try:
+                data, addr = self.sock.recvfrom(4096)
+            except OSError:
+                return
+            info = _parse_announcement(data, addr[0])
+            if info:
+                try:
+                    self.on_found([info])
+                except Exception:
+                    print(traceback.format_exc(), flush=True)
 
 
 class MediaLibrary:
@@ -80,6 +170,7 @@ class MediaLibrary:
 class ProjectorClient:
     def __init__(self, cfg: ProjectorConfig):
         self.cfg = cfg
+        self.working = ""  # the address that last answered
 
     def _headers(self) -> dict:
         h = {"Content-Type": "application/json"}
@@ -87,18 +178,31 @@ class ProjectorClient:
             h["X-Api-Token"] = self.cfg.token
         return h
 
+    def targets(self) -> list[str]:
+        """The configured host name, then the last address discovery found."""
+        return list(dict.fromkeys(t for t in (self.cfg.host, self.cfg.address) if t))
+
     def request(self, method: str, path: str, body: dict | None = None, timeout: float = 4.0) -> dict:
-        conn = http.client.HTTPConnection(self.cfg.host, self.cfg.port, timeout=timeout)
-        try:
-            data = None if body is None else json.dumps(body).encode()
-            conn.request(method, path, body=data, headers=self._headers())
-            resp = conn.getresponse()
-            payload = json.loads(resp.read() or b"{}")
-            if resp.status >= 400:
-                raise RuntimeError(payload.get("error") or f"HTTP {resp.status}")
-            return payload
-        finally:
-            conn.close()
+        targets = self.targets()
+        if not targets:
+            raise ConnectionError("Not found on the network yet — is it powered on?")
+        last: Exception | None = None
+        for target in targets:
+            conn = http.client.HTTPConnection(target, self.cfg.port, timeout=timeout)
+            try:
+                data = None if body is None else json.dumps(body).encode()
+                conn.request(method, path, body=data, headers=self._headers())
+                resp = conn.getresponse()
+                payload = json.loads(resp.read() or b"{}")
+                if resp.status >= 400:
+                    raise RuntimeError(payload.get("error") or f"HTTP {resp.status}")
+                self.working = target
+                return payload
+            except OSError as e:  # can't connect/resolve: try the next address
+                last = e
+            finally:
+                conn.close()
+        raise last
 
     def status(self) -> dict:
         return self.request("GET", "/api/status")
@@ -123,7 +227,7 @@ class ProjectorClient:
 
     def upload(self, rel: str, source: Path, progress) -> None:
         size = source.stat().st_size
-        conn = http.client.HTTPConnection(self.cfg.host, self.cfg.port, timeout=120)
+        conn = http.client.HTTPConnection(self.working or self.cfg.target, self.cfg.port, timeout=120)
         try:
             conn.putrequest("PUT", "/api/library/" + quote(rel))
             conn.putheader("Content-Length", str(size))
@@ -169,14 +273,82 @@ class ProjectorManager:
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._was_in_window = False
+        self.discovered: dict[str, dict] = {}  # agent id -> what it last told us
+        self.last_scan = 0.0
+        self.last_scan_at = ""
+        self.scan_port = DISCOVERY_PORT
+        self.scan_targets: list[str] | None = None  # tests point this at 127.0.0.1
+        self._listener: AnnouncementListener | None = None
 
     # ---- lifecycle ----
 
     def start(self) -> None:
+        try:
+            self._listener = AnnouncementListener(self.found, self.scan_port)
+            self._listener.start()
+        except OSError as e:
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S} projector announcements unavailable: {e}", flush=True)
         threading.Thread(target=self._run, name="projectors", daemon=True).start()
 
     def stop_thread(self) -> None:
         self._stop.set()
+        if self._listener:
+            self._listener.close()
+
+    # ---- discovery ----
+
+    def scan_now(self, timeout: float = 1.5) -> list[dict]:
+        found = scan(timeout, self.scan_port, self.scan_targets)
+        with self._lock:
+            self.last_scan = self.clock()
+            self.last_scan_at = datetime.now().isoformat(timespec="seconds")
+        self.found(found)
+        return found
+
+    def found(self, agents: list[dict]) -> None:
+        """Record agents heard from, and point configured projectors at them (by id, else name)."""
+        changed = False
+        with self._lock:
+            for a in agents:
+                self.discovered[a["id"]] = {**a, "seen": datetime.now().isoformat(timespec="seconds")}
+                for cfg in self.config.projectors:
+                    if not (cfg.id == a["id"] or (not cfg.id and cfg.name.casefold() == a["name"].casefold())):
+                        continue
+                    if (cfg.id, cfg.address, cfg.port) != (a["id"], a["address"], a["port"]):
+                        cfg.id, cfg.address, cfg.port = a["id"], a["address"], a["port"]
+                        changed = True
+            if changed:
+                save_state(self.config)
+
+    def discovered_list(self) -> list[dict]:
+        with self._lock:
+            ids = {p.id for p in self.config.projectors}
+            return [{**a, "added": a["id"] in ids} for a in self.discovered.values()]
+
+    def add_discovered(self, agent_id: str) -> None:
+        with self._lock:
+            a = self.discovered.get(agent_id)
+            if a is None:
+                raise ValueError("That projector hasn't been found — scan again")
+            if any(p.id == agent_id for p in self.config.projectors):
+                raise ValueError(f"{a['name']} is already added")
+            name, n = a["name"] or a["hostname"] or "Projector", 2
+            while any(p.name == name for p in self.config.projectors):
+                name, n = f"{a['name']} {n}", n + 1
+            cfg = ProjectorConfig(name=name, port=a["port"], id=a["id"], address=a["address"], added_from_page=True)
+            self.config.projectors.append(cfg)
+            self.clients.append(ProjectorClient(cfg))
+            self.states.append(_State())
+            save_state(self.config)
+
+    def remove(self, i: int) -> None:
+        self._check(i)
+        with self._lock:
+            if not self.config.projectors[i].added_from_page:
+                raise ValueError("This projector is set up in config.toml; remove it there")
+            for lst in (self.config.projectors, self.clients, self.states):
+                del lst[i]
+            save_state(self.config)
 
     def _run(self) -> None:
         while not self._stop.is_set():
@@ -192,8 +364,13 @@ class ProjectorManager:
         in_window = bool(self.in_window())
         window_started = in_window and not self._was_in_window
         self._was_in_window = in_window
-        for i in range(len(self.clients)):
-            self._poll(i, in_window, window_started)
+        with self._lock:
+            n = len(self.clients)
+        for i in range(n):
+            try:
+                self._poll(i, in_window, window_started)
+            except IndexError:  # removed while we were polling
+                break
 
     def _poll(self, i: int, in_window: bool, window_started: bool) -> None:
         client, st = self.clients[i], self.states[i]
@@ -203,7 +380,15 @@ class ProjectorManager:
         except Exception as e:
             with self._lock:
                 st.online, st.error = False, _short(e)
-            return
+                rescan = now - self.last_scan >= RESCAN_SECONDS
+            if rescan:  # maybe it came back on a different address
+                self.scan_now()
+                try:
+                    status = client.status()
+                except Exception:
+                    return
+            else:
+                return
         with self._lock:
             rebooted = status.get("uptime", 0) < st.uptime
             st.online, st.status, st.last_seen, st.error = True, status, now, ""
@@ -266,7 +451,9 @@ class ProjectorManager:
                 extra = [f for f in (st.device_files or {}) if f not in set(cfg.playlist)]
                 s = st.status
                 out.append({
-                    "index": i, "name": cfg.name, "host": cfg.host, "online": st.online, "error": st.error,
+                    "index": i, "name": cfg.name, "host": cfg.host, "address": cfg.address, "id": cfg.id,
+                    "connected_via": self.clients[i].working if st.online else "",
+                    "added_from_page": cfg.added_from_page, "online": st.online, "error": st.error,
                     "mode": s.get("mode"), "mode_after_reboot": s.get("mode_after_reboot"),
                     "state": s.get("state") if st.online else None, "file": s.get("file"),
                     "position": s.get("position"), "duration": s.get("duration"),

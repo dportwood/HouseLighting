@@ -26,6 +26,9 @@ Admin (need `api_token` from the config, as X-Api-Token header or ?token=, when 
   POST /api/projectors/<n>/sync      copy missing videos (projector must be in sync mode)
   POST /api/projectors/<n>/mode      {"mode": "show" | "sync"}  (the projector reboots)
   POST /api/projectors/<n>/power     {"action": "reboot" | "poweroff"}
+  POST /api/projectors/<n>/remove    forget a projector added from the page
+  POST /api/projectors/scan          look for projector agents on the network
+  POST /api/projectors/add           {"id"} add a projector the scan found
 
 Also open: GET /api/projectors (status of each), GET /api/media (video library).
 
@@ -122,8 +125,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/schedule":
             return self._json(self.player.schedule())
         if path == "/api/projectors":
-            return self._json({"projectors": self.projectors.snapshot() if self.projectors else [],
-                               "media": bool(self.projectors and self.projectors.library.root)})
+            return self._json(self._projectors_payload())
         if path == "/api/media":
             return self._json({"files": self.projectors.library.scan() if self.projectors else []})
         if path == "/api/sequences":
@@ -170,10 +172,17 @@ class _Handler(BaseHTTPRequestHandler):
     def _projector_action(self, path: str, body: dict):
         if not self.projectors:
             return self._error(404, "No projectors configured")
-        parts = path.split("/")  # ["", "api", "projectors", n, action]
+        parts = path.split("/")  # ["", "api", "projectors", n, action]  or  [..., "scan" | "add"]
+        mgr = self.projectors
+        if len(parts) == 4 and parts[3] == "scan":
+            mgr.scan_now()
+            return self._json(self._projectors_payload())
+        if len(parts) == 4 and parts[3] == "add":
+            mgr.add_discovered(str(body.get("id", "")))
+            return self._json(self._projectors_payload())
         if len(parts) != 5 or not parts[3].isdigit():
             return self._error(404, "Not found")
-        i, action, mgr = int(parts[3]), parts[4], self.projectors
+        i, action = int(parts[3]), parts[4]
         if action == "playlist":
             files = body.get("files")
             if not isinstance(files, list) or len(files) > 500:
@@ -189,9 +198,18 @@ class _Handler(BaseHTTPRequestHandler):
             mgr.set_mode(i, str(body.get("mode", "")))
         elif action == "power":
             mgr.power(i, str(body.get("action", "")))
+        elif action == "remove":
+            mgr.remove(i)
         else:
             return self._error(404, "Not found")
-        self._json({"projectors": mgr.snapshot()})
+        self._json(self._projectors_payload())
+
+    def _projectors_payload(self) -> dict:
+        mgr = self.projectors
+        if not mgr:
+            return {"projectors": [], "discovered": [], "last_scan": "", "media": False}
+        return {"projectors": mgr.snapshot(), "discovered": mgr.discovered_list(),
+                "last_scan": mgr.last_scan_at, "media": bool(mgr.library.root)}
 
     # ---- admin actions ----
 

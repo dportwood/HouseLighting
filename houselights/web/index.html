@@ -309,6 +309,12 @@
   <!-- ===== Projectors ===== -->
   <div class="tab hidden" id="tab-projectors" role="tabpanel">
     <div class="tab" id="projList"></div>
+    <section id="projFind">
+      <h2>Find projectors <span class="meta" id="projScanMeta"></span></h2>
+      <p class="help">Projectors are found on the Wi-Fi automatically, even if their address changes. Scan to look now.</p>
+      <ul class="proj-pl" id="projFound" style="margin-top:10px"></ul>
+      <div class="row admin-only hidden" style="margin-top:10px"><button class="ghost" id="projScan">Scan for projectors</button></div>
+    </section>
     <div class="tab hidden" id="projEdit">
       <section>
         <h2 id="projEditTitle">Playlist</h2>
@@ -418,6 +424,7 @@ function dotsFor(colors) { return el("span", { class: "dots" }, ...colors.map(c 
 // ---------- admin / unlock ----------
 function applyAdmin() {
   document.querySelectorAll(".admin-only").forEach(n => n.classList.toggle("hidden", !isAdmin));
+  $("tabBtn-projectors").classList.toggle("hidden", !projectorCount && !isAdmin);
   $("unlock").classList.toggle("hidden", kioskMode || isAdmin || !tokenRequired || tab === "controls");
 }
 
@@ -679,6 +686,7 @@ $("saveBtn").addEventListener("click", async () => {
 
 // ---------- projectors ----------
 let projectorCount = 0, projData = [], projKey = "", projLive = {}, projEditing = null, mediaFiles = [];
+let projFound = [], projFoundKey = "", projLastScan = "";
 const fmtBytes = b => b == null ? "?" : b === 0 ? "0 MB" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
 const mediaInfo = path => mediaFiles.find(f => f.path === path);
 const shortCollection = c => c.replace(/^Atmos(Fear|FEAR)FX\s*-\s*/i, "");
@@ -698,15 +706,50 @@ async function loadProjectors() {
     mediaFiles = await api("/api/media").then(m => m.files).catch(() => []);
   }
   projData = d.projectors;
+  projFound = d.discovered || [];
+  projLastScan = d.last_scan || "";
+  renderFound();
   // Rebuild only when something structural changes; clocks and progress bars update in place.
-  const key = JSON.stringify([projData.map(p => [p.online, p.mode, p.mode_after_reboot, p.state, p.file, p.playlist, p.shuffle,
-    p.missing, p.extra.length, p.user_stopped, p.sync.state, p.sync.message, p.error, p.files_known]), isAdmin]);
+  const key = JSON.stringify([projData.map(p => [p.name, p.online, p.mode, p.mode_after_reboot, p.state, p.file, p.playlist, p.shuffle,
+    p.missing, p.extra.length, p.user_stopped, p.sync.state, p.sync.message, p.error, p.files_known, p.connected_via, p.address]), isAdmin]);
   if (key !== projKey) { projKey = key; renderProjectors(); }
   for (const p of projData) if (projLive[p.index]) projLive[p.index](p);
 }
 
+function renderFound() {
+  const key = JSON.stringify([projFound.map(f => [f.id, f.name, f.address, f.mode, f.added]), projLastScan, isAdmin]);
+  if (key === projFoundKey) return;
+  projFoundKey = key;
+  $("projScanMeta").textContent = projLastScan ? `last scan ${new Date(projLastScan).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  $("projFound").replaceChildren(...(projFound.length ? projFound.map(f => el("li", {},
+    el("div", {}, el("div", { class: "name", textContent: f.name || f.hostname || f.id }),
+      el("div", { class: "sub", textContent: `${f.address} · ${f.mode || "?"} mode · ${f.hostname || ""} · id ${f.id}` })),
+    f.added ? el("span", { class: "badge", textContent: "Added" })
+      : isAdmin ? el("button", { class: "ghost small", textContent: "Add", onclick: () => projGlobal("add", { id: f.id }) }) : null))
+    : [el("p", { class: "empty", textContent: "None found yet. Is the projector Pi powered on and on the Wi-Fi?" })]));
+}
+
+async function projGlobal(action, body) {
+  try {
+    if (action === "scan") { $("projScan").disabled = true; $("projScan").textContent = "Scanning…"; }
+    const d = await api(`/api/projectors/${action}`, body);
+    projData = d.projectors; projFound = d.discovered; projLastScan = d.last_scan;
+    projKey = ""; projFoundKey = ""; renderFound(); renderProjectors();
+    for (const p of projData) if (projLive[p.index]) projLive[p.index](p);
+    if (action === "scan") say(`Found ${projFound.length} projector${projFound.length === 1 ? "" : "s"}`, true);
+    if (action === "add") say("Projector added", true);
+  } catch (e) { say(e.message); }
+  finally { $("projScan").disabled = false; $("projScan").textContent = "Scan for projectors"; }
+}
+$("projScan").addEventListener("click", () => projGlobal("scan", {}));
+
 function renderProjectors() {
   projLive = {};
+  if (!projData.length) {
+    $("projList").replaceChildren(el("section", {}, el("h2", { textContent: "Projectors" }),
+      el("p", { class: "help", textContent: "No projectors set up yet. Power one on, then Scan and Add it below — or add it to config.toml." })));
+    return;
+  }
   $("projList").replaceChildren(...projData.map(p => {
     const modeText = !p.online ? "Offline" : p.mode_after_reboot && p.mode_after_reboot !== p.mode
       ? `Switching to ${p.mode_after_reboot} mode…` : p.mode === "show" ? "Show mode · outside" : "Sync mode · inside";
@@ -718,7 +761,9 @@ function renderProjectors() {
 
     const card = el("section", { class: "proj" }, head, now);
     if (!p.online) {
-      card.append(el("p", { class: "help", textContent: `Can't reach ${p.host}${p.error ? ` (${p.error})` : ""}. Is it powered on and on the Wi-Fi?` }));
+      card.append(el("p", { class: "help", textContent: `Can't reach ${p.host || p.address || p.name}${p.error ? ` (${p.error})` : ""}. Is it powered on and on the Wi-Fi? It's found again automatically when it comes back.` }));
+      if (isAdmin && p.added_from_page) card.append(el("div", { class: "row" }, el("button", { class: "ghost", textContent: "Remove",
+        onclick: () => { if (confirm(`Remove ${p.name} from the app? (The Pi isn't changed; scan to add it again.)`)) projAction(p.index, "remove", {}); } })));
       return card;
     }
 
@@ -773,9 +818,12 @@ function renderProjectors() {
       powerRow.append(
         el("button", { class: "ghost", textContent: "Restart", onclick: () => { if (confirm(`Restart ${p.name}?`)) projAction(p.index, "power", { action: "reboot" }); } }),
         el("button", { class: "ghost", textContent: "Shut down", onclick: () => { if (confirm(`Shut ${p.name} down? Unplug it after about 20 seconds; plug it back in to start it.`)) projAction(p.index, "power", { action: "poweroff" }); } }));
+      if (p.added_from_page) powerRow.append(el("button", { class: "ghost", textContent: "Remove",
+        onclick: () => { if (confirm(`Remove ${p.name} from the app? (The Pi isn't changed; scan to add it again.)`)) projAction(p.index, "remove", {}); } }));
       card.append(el("div", { class: "proj-block" }, el("h2", { textContent: "Projector" }), modeRow, powerRow));
     }
-    const disk = el("p", { class: "help", textContent: `${fmtBytes(p.disk_free)} free of ${fmtBytes(p.disk_total)} · ${p.host} · agent ${p.version || "?"}` });
+    const where = p.host && p.connected_via && p.connected_via !== p.host ? `${p.host} → ${p.connected_via}` : (p.connected_via || p.host || p.address);
+    const disk = el("p", { class: "help", textContent: `${fmtBytes(p.disk_free)} free of ${fmtBytes(p.disk_total)} · ${where} · agent ${p.version || "?"}` });
     card.append(disk);
 
     projLive[p.index] = q => {
@@ -797,6 +845,7 @@ function renderProjectors() {
       } else {
         bar.classList.add("hidden");
         const status = !q.files_known ? "Checking…"
+          : !q.playlist.length ? "No playlist yet."
           : q.missing.length ? `${q.missing.length} video(s) to copy (${fmtBytes(q.missing_bytes)})${q.mode === "show" ? " — bring it inside and switch to sync mode" : ""}.`
           : "All playlist videos are on the projector.";
         const extra = q.extra.length ? ` ${q.extra.length} old video(s) will be removed on the next sync.` : "";
@@ -811,7 +860,7 @@ function renderProjectors() {
 async function projAction(i, action, body) {
   try {
     const d = await api(`/api/projectors/${i}/${action}`, body);
-    projData = d.projectors; projKey = ""; renderProjectors();
+    projData = d.projectors; projFound = d.discovered || projFound; projKey = ""; projFoundKey = ""; renderFound(); renderProjectors();
     for (const p of projData) if (projLive[p.index]) projLive[p.index](p);
     if (action === "mode" || action === "power") say("The projector is restarting — give it about a minute.", true);
   } catch (e) { say(e.message); }
@@ -829,6 +878,7 @@ async function openProjEditor(i) {
   $("projShuffle").checked = projShuffle;
   $("projSearch").value = "";
   $("projList").classList.add("hidden");
+  $("projFind").classList.add("hidden");
   $("projEdit").classList.remove("hidden");
   renderProjDraft(); renderLibrary();
   scrollTo(0, 0);
@@ -837,6 +887,7 @@ function closeProjEditor() {
   projEditing = null; projKey = "";
   $("projEdit").classList.add("hidden");
   $("projList").classList.remove("hidden");
+  $("projFind").classList.remove("hidden");
   loadProjectors();
 }
 
@@ -1231,7 +1282,6 @@ $("schedSave").addEventListener("click", async () => {
     tokenRequired = opts.token_required;
     kioskAvailable = opts.kiosk_available;
     projectorCount = opts.projectors || 0;
-    $("tabBtn-projectors").classList.toggle("hidden", !projectorCount);
     kioskSeconds = opts.kiosk_seconds || 60;
     document.querySelectorAll(".kioskLen").forEach(n => { n.textContent = kioskSeconds % 60 ? `${kioskSeconds} seconds` : `${kioskSeconds / 60} minute${kioskSeconds === 60 ? "" : "s"}`; });
     $("kioskUnavailable").classList.toggle("hidden", kioskAvailable);

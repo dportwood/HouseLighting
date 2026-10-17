@@ -52,18 +52,28 @@ trip inside to sync.
 
 ## Hook it up to the app
 
-In `config.toml` on the PC (top level, above the first `[section]`):
+1. In `config.toml` on the PC, at the top level (above the first `[section]`), point at the video library:
+
+   ```toml
+   media_dir = 'C:\Users\david\Videos\AtmosFX'
+   ```
+
+   Restart the player (House Lights control window → Restart).
+2. **Projectors** tab → **Scan for projectors** → **Add** next to it.
+
+That's all — no IP addresses. The app finds projectors by broadcast (UDP port
+8091) and by their announcements when they boot, and follows them if DHCP hands
+out a new address: a projector that stops answering triggers a rescan, and it
+remembers the last address in `show.json`.
+
+You can also list a projector in `config.toml` instead (handy for a token):
 
 ```toml
-media_dir = 'C:\Users\david\Videos\AtmosFX'
-
 [[projectors]]
-name = "Projector 1"
-host = "projector1.local"
-# token = "..."          # if you set "token" in the Pi's /etc/hl-projector.json
+name = "Projector 1"          # must match the name given to setup.sh
+host = "projector1.local"     # optional; tried first, then the address found by scanning
+# token = "..."               # if you set "token" in the Pi's /etc/hl-projector.json
 ```
-
-Restart the player (House Lights control window → Restart). A **Projectors** tab appears.
 
 ## The routine
 
@@ -78,6 +88,8 @@ Use **Shut down** before unplugging in sync mode if you can (it's safe in show m
 
 ## Notes
 
+- If a scan finds nothing: the PC and the Pi must be on the same network, and
+  Windows Firewall must allow Python on private networks (it asks the first time).
 - Agent API and options: see the top of `hl_projector.py`. Config: `/etc/hl-projector.json`
   (`name`, `port`, `token`, `media_dir`, `mpv_profile`, `mpv_extra`, `audio`).
 - Logs: `journalctl -u hl-projector` (kept in memory only; gone after a reboot).

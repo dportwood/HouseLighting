@@ -164,13 +164,14 @@ def _serve(args) -> None:
     player = Player(cfg, layout, out)
     print(f"Loading {sum(i.type == 'fseq' for i in cfg.playlist)} sequence(s)...")
     player.preload()
-    projectors = None
-    if cfg.projectors:
-        from .projectors import MediaLibrary, ProjectorManager
+    from .projectors import MediaLibrary, ProjectorManager
 
-        projectors = ProjectorManager(cfg, MediaLibrary(cfg.media_dir), player.in_window)
-        projectors.start()
-        print(f"Projectors: {', '.join(f'{p.name} ({p.host})' for p in cfg.projectors)}; media: {cfg.media_dir}")
+    # Always running, so the Projectors tab can scan for and add projectors from the page.
+    projectors = ProjectorManager(cfg, MediaLibrary(cfg.media_dir), player.in_window)
+    projectors.start()
+    if cfg.projectors:
+        where = [f"{p.name} ({p.target or 'found by scan'})" for p in cfg.projectors]
+        print(f"Projectors: {', '.join(where)}; media: {cfg.media_dir}")
     server = make_server(player, cfg.http_host, cfg.http_port, projectors)
     serve_in_thread(server)
     print(f"Control page: http://localhost:{cfg.http_port}/  (Ctrl+C to stop)")

@@ -20,6 +20,10 @@ API (writes need the token from the config when one is set, as X-Api-Token):
   POST   /api/mode                {"mode": "show" | "sync"}  then reboots
   POST   /api/power               {"action": "reboot" | "poweroff"}
 
+Discovery (so the app finds it whatever IP DHCP hands out): the agent answers
+UDP broadcasts of b"HLPROJECTOR?" on port 8091 with a JSON description, and
+announces itself the same way after boot and every minute.
+
     python3 hl_projector.py --config /etc/hl-projector.json
     python3 hl_projector.py --config ... --probe /path/to/video.mp4   # try mpv settings on this Pi
     python3 hl_projector.py --fake --media-dir ./media --port 8090    # no mpv (development)
@@ -43,7 +47,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
+DISCOVERY_PORT = 8091
+DISCOVERY_QUERY = b"HLPROJECTOR?"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv"}
 CHUNK = 1024 * 1024
 
@@ -70,6 +76,8 @@ DEFAULT_CONFIG = {
     "mpv_extra": [],
     "audio": False,
     "socket": "/run/hl-projector/mpv.sock",
+    "discovery_port": DISCOVERY_PORT,
+    "id": "",  # normally derived from /etc/machine-id
 }
 
 
@@ -217,6 +225,19 @@ def boot_cmdline() -> Path | None:
     return None
 
 
+def machine_id() -> str:
+    """Stable per-Pi id (survives reflashing the agent, not reflashing the OS)."""
+    for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+        try:
+            text = Path(p).read_text().strip()
+            if text:
+                return text[:12]
+        except OSError:
+            pass
+    import hashlib
+    return hashlib.sha1(socket.gethostname().encode()).hexdigest()[:12]
+
+
 class Agent:
     def __init__(self, config: dict, player, fake_mode: str | None = None):
         self.config = config
@@ -228,6 +249,12 @@ class Agent:
         self.playlist: list[str] = []
         self.shuffle = False
         self.lock = threading.Lock()
+        self.id = config.get("id") or machine_id()
+
+    def describe(self) -> dict:
+        """What discovery replies and announcements carry."""
+        return {"type": "hl-projector", "id": self.id, "name": self.config["name"], "port": self.config["port"],
+                "version": VERSION, "mode": self.mode(), "hostname": socket.gethostname()}
 
     # ---- mode ----
 
@@ -364,6 +391,7 @@ class Agent:
         usage = shutil.disk_usage(self.media)
         return {
             "name": self.config["name"],
+            "id": self.id,
             "version": VERSION,
             "mode": self.mode(),
             "mode_after_reboot": self.mode_after_reboot(),
@@ -459,6 +487,57 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
 
+class Discovery:
+    """Answers b"HLPROJECTOR?" broadcasts and announces this agent now and then."""
+
+    ANNOUNCE_AFTER = (3, 10, 30)  # seconds after start (Wi-Fi may take a moment), then every minute
+    ANNOUNCE_EVERY = 60
+
+    def __init__(self, agent: Agent, port: int, host: str = ""):
+        self.agent, self.port = agent, port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.sock.bind((host, port))
+        self._stop = threading.Event()
+
+    def start(self, announce: bool = True) -> None:
+        threading.Thread(target=self._answer, name="discovery", daemon=True).start()
+        if announce:
+            threading.Thread(target=self._announce, name="announce", daemon=True).start()
+
+    def close(self) -> None:
+        self._stop.set()
+        self.sock.close()
+
+    def _payload(self, event: str) -> bytes:
+        return json.dumps({**self.agent.describe(), "event": event}).encode()
+
+    def _answer(self) -> None:
+        while not self._stop.is_set():
+            try:
+                data, addr = self.sock.recvfrom(2048)
+            except OSError:
+                return
+            if data.startswith(DISCOVERY_QUERY):
+                try:
+                    self.sock.sendto(self._payload("reply"), addr)
+                except OSError:
+                    pass
+
+    def _announce(self) -> None:
+        start = time.monotonic()
+        schedule = list(self.ANNOUNCE_AFTER)
+        while not self._stop.is_set():
+            wait = (schedule.pop(0) - (time.monotonic() - start)) if schedule else self.ANNOUNCE_EVERY
+            if self._stop.wait(max(0.0, wait)):
+                return
+            try:
+                self.sock.sendto(self._payload("hello"), ("<broadcast>", self.port))
+            except OSError:
+                pass  # no network yet; try again next time
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -537,13 +616,21 @@ def main(argv=None) -> None:
     agent = Agent(cfg, player, fake_mode="sync" if args.fake else None)
     player.start()
     server = make_server(agent, "0.0.0.0", cfg["port"])
-    log(f"hl-projector {VERSION} '{cfg['name']}' on port {cfg['port']}, mode {agent.mode()}, "
+    discovery = None
+    try:
+        discovery = Discovery(agent, int(cfg.get("discovery_port", DISCOVERY_PORT)))
+        discovery.start()
+    except OSError as e:
+        log(f"discovery unavailable: {e}")
+    log(f"hl-projector {VERSION} '{cfg['name']}' (id {agent.id}) on port {cfg['port']}, mode {agent.mode()}, "
         f"{len(agent.library())} videos in {agent.media}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if discovery:
+            discovery.close()
         player.close()
 
 

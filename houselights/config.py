@@ -82,19 +82,28 @@ class Item:
 
 @dataclass
 class ProjectorConfig:
-    """A projector Pi running projector/hl_projector.py."""
+    """A projector Pi running projector/hl_projector.py.
+
+    `host` (e.g. projector1.local) is optional: the app also finds agents by
+    broadcast discovery, matching on `id` (learned on first contact) or `name`,
+    and remembers the last IP it found them at in `address`.
+    """
 
     name: str
-    host: str
+    host: str = ""
     port: int = 8090
     token: str = ""
-    # Edited from the page and kept in show.json:
+    # Kept in show.json:
     playlist: list[str] = field(default_factory=list)  # paths relative to media_dir (posix style)
     shuffle: bool = False
+    id: str = ""  # the agent's id
+    address: str = ""  # last IP discovery found it at
+    added_from_page: bool = False  # not in config.toml; can be removed from the page
 
     @property
-    def base_url(self) -> str:
-        return f"http://{self.host}:{self.port}"
+    def target(self) -> str:
+        """Where to connect: the configured host name, else the last discovered IP."""
+        return self.host or self.address
 
 
 @dataclass
@@ -179,10 +188,10 @@ def parse_config(raw: dict, base_dir: Path = Path(".")) -> Config:
 
 
 def _parse_projector(p: dict) -> ProjectorConfig:
-    if not p.get("name") or not p.get("host"):
-        raise ValueError("Each [[projectors]] entry needs a name and a host")
-    return ProjectorConfig(name=str(p["name"]), host=str(p["host"]), port=int(p.get("port", 8090)),
-                           token=str(p.get("token", "")))
+    if not p.get("name"):
+        raise ValueError("Each [[projectors]] entry needs a name (the agent's name; host is optional)")
+    return ProjectorConfig(name=str(p["name"]), host=str(p.get("host", "")), port=int(p.get("port", 8090)),
+                           token=str(p.get("token", "")), id=str(p.get("id", "")))
 
 
 def parse_window(w: dict) -> Window:
@@ -316,6 +325,13 @@ def item_to_dict(item: Item, show_dir: Path) -> dict:
     return d
 
 
+def _projector_state(p: ProjectorConfig) -> dict:
+    d = {"playlist": p.playlist, "shuffle": p.shuffle, "id": p.id, "address": p.address}
+    if p.added_from_page:
+        d.update(added_from_page=True, port=p.port, token=p.token)
+    return d
+
+
 def load_state(cfg: Config) -> None:
     """Replace the schedule/playlist from config.toml with show.json, if it exists."""
     if cfg.state_file is None or not cfg.state_file.exists():
@@ -324,10 +340,20 @@ def load_state(cfg: Config) -> None:
     cfg.windows = [parse_window(w) for w in raw.get("windows", [])]
     cfg.playlist = [parse_item(i, cfg.show_dir) for i in raw.get("playlist", [])]
     cfg.shuffle = bool(raw.get("shuffle", cfg.shuffle))
+    saved_projectors = raw.get("projectors", {})
+    known = {p.name for p in cfg.projectors}
+    for name, saved in saved_projectors.items():  # projectors added from the page
+        if saved.get("added_from_page") and name not in known:
+            cfg.projectors.append(ProjectorConfig(name=name, port=int(saved.get("port", 8090)),
+                                                  token=str(saved.get("token", "")), added_from_page=True))
     for proj in cfg.projectors:
-        saved = raw.get("projectors", {}).get(proj.name, {})
+        saved = saved_projectors.get(proj.name, {})
         proj.playlist = [str(f) for f in saved.get("playlist", [])]
         proj.shuffle = bool(saved.get("shuffle", False))
+        proj.id = proj.id or str(saved.get("id", ""))
+        proj.address = str(saved.get("address", ""))
+        if proj.added_from_page:
+            proj.port = int(saved.get("port", proj.port))
 
 
 def save_state(cfg: Config) -> None:
@@ -338,7 +364,7 @@ def save_state(cfg: Config) -> None:
         "windows": [window_to_dict(w) for w in cfg.windows],
         "shuffle": cfg.shuffle,
         "playlist": [item_to_dict(i, cfg.show_dir) for i in cfg.playlist],
-        "projectors": {p.name: {"playlist": p.playlist, "shuffle": p.shuffle} for p in cfg.projectors},
+        "projectors": {p.name: _projector_state(p) for p in cfg.projectors},
     }
     tmp = cfg.state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")

@@ -44,7 +44,9 @@ python -m houselights serve --config config.toml
     show outside), what it's playing, Play / Stop, its playlist (browse the
     video library by collection and version), **Sync now** with progress, and
     **Ready for outside** / **Switch to sync mode**. Projectors follow the show's
-    schedule. Building the Pi: [projector/README.md](projector/README.md).
+    schedule. **Scan for projectors** finds them on the network (no IPs needed),
+    and they're followed through DHCP address changes. Building the Pi:
+    [projector/README.md](projector/README.md).
   * **Kiosk** (admins) — locks a device (e.g. the outdoor tablet) to a simple
     "make your own pattern" screen. Visitors tap **Show it on the house!** and
     their pattern plays for `kiosk_seconds` (default 60), then the show carries

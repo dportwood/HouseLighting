@@ -164,7 +164,14 @@ def _serve(args) -> None:
     player = Player(cfg, layout, out)
     print(f"Loading {sum(i.type == 'fseq' for i in cfg.playlist)} sequence(s)...")
     player.preload()
-    server = make_server(player, cfg.http_host, cfg.http_port)
+    projectors = None
+    if cfg.projectors:
+        from .projectors import MediaLibrary, ProjectorManager
+
+        projectors = ProjectorManager(cfg, MediaLibrary(cfg.media_dir), player.in_window)
+        projectors.start()
+        print(f"Projectors: {', '.join(f'{p.name} ({p.host})' for p in cfg.projectors)}; media: {cfg.media_dir}")
+    server = make_server(player, cfg.http_host, cfg.http_port, projectors)
     serve_in_thread(server)
     print(f"Control page: http://localhost:{cfg.http_port}/  (Ctrl+C to stop)")
     try:
@@ -173,6 +180,8 @@ def _serve(args) -> None:
         pass
     finally:
         player.stop()
+        if projectors:
+            projectors.stop_thread()
         server.shutdown()
         out.send(np.zeros(layout.total_channels, dtype=np.uint8))
         out.close()

@@ -40,6 +40,11 @@ python -m houselights serve --config config.toml
   * **Which lights** (Controls) — pick all lights, an xLights group, or one string;
     every control then edits just that. Strings can also be turned off or reset
     to match. Per-string settings are kept by Save to playlist.
+  * **Projectors** (when configured) — each projector Pi's mode (sync inside /
+    show outside), what it's playing, Play / Stop, its playlist (browse the
+    video library by collection and version), **Sync now** with progress, and
+    **Ready for outside** / **Switch to sync mode**. Projectors follow the show's
+    schedule. Building the Pi: [projector/README.md](projector/README.md).
   * **Kiosk** (admins) — locks a device (e.g. the outdoor tablet) to a simple
     "make your own pattern" screen. Visitors tap **Show it on the house!** and
     their pattern plays for `kiosk_seconds` (default 60), then the show carries

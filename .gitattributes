@@ -1,0 +1,2 @@
+*.sh text eol=lf
+projector/*.py text eol=lf

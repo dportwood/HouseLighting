@@ -23,6 +23,8 @@ Still to do:
 * ~~Schedule and playlist editing from the page~~ — Schedule tab, playlist edit
   mode, Save to playlist; stored in `show.json`.
 * ~~Local start/stop/status~~ — `houselights control` window + desktop shortcut.
+* ~~Projector video~~ — projector Pis play AtmosFX videos ([projector/README.md](../projector/README.md)):
+  sync mode inside to copy videos, read-only show mode outside, follows the show schedule.
 * Multiple playlists (e.g. Halloween / Christmas) chosen per show time.
 * Consider a Pi 4/5 replacing the dead .64 so the show doesn't depend on this PC.
 * Optionally send FPP MultiSync so remotes can play local `.fseq` copies.

@@ -20,6 +20,14 @@ Admin (need `api_token` from the config, as X-Api-Token header or ?token=, when 
   POST /api/playlist       {"items": [...], "shuffle": bool} replace the playlist
   POST /api/playlist/add   {"name", "seconds", "effect", "colors", "speed", "band", "brightness"} append an effect
   POST /api/schedule       {"windows": [...]} replace the schedule
+  POST /api/projectors/<n>/playlist  {"files": [...], "shuffle": bool}
+  POST /api/projectors/<n>/play      {"file"?}  whole playlist, or one video on loop
+  POST /api/projectors/<n>/stop      black until the next show starts
+  POST /api/projectors/<n>/sync      copy missing videos (projector must be in sync mode)
+  POST /api/projectors/<n>/mode      {"mode": "show" | "sync"}  (the projector reboots)
+  POST /api/projectors/<n>/power     {"action": "reboot" | "poweroff"}
+
+Also open: GET /api/projectors (status of each), GET /api/media (video library).
 
 Local only (from this computer):
   POST /api/shutdown       black out the lights and stop the player
@@ -65,8 +73,8 @@ class _Server(ThreadingHTTPServer):
               f"{traceback.format_exc()}", flush=True)
 
 
-def make_server(player: Player, host: str, port: int) -> ThreadingHTTPServer:
-    handler = type("Handler", (_Handler,), {"player": player})
+def make_server(player: Player, host: str, port: int, projectors=None) -> ThreadingHTTPServer:
+    handler = type("Handler", (_Handler,), {"player": player, "projectors": projectors})
     server = _Server((host, port), handler)
     server.daemon_threads = True
     return server
@@ -80,6 +88,7 @@ def serve_in_thread(server: ThreadingHTTPServer) -> threading.Thread:
 
 class _Handler(BaseHTTPRequestHandler):
     player: Player
+    projectors = None  # ProjectorManager when projectors are configured
     server_version = "HouseLights"
 
     def log_message(self, fmt, *args):  # keep the console quiet; status polling is frequent
@@ -102,6 +111,7 @@ class _Handler(BaseHTTPRequestHandler):
                 "token_required": bool(cfg.api_token),
                 "kiosk_available": bool(cfg.kiosk_pin or cfg.api_token),
                 "kiosk_seconds": cfg.kiosk_seconds,
+                "projectors": len(cfg.projectors),
                 "strings": [{"name": m.name, "pixels": m.nodes} for m in self.player.visible_models],
                 "groups": self._groups(),
             })
@@ -111,6 +121,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(self.player.playlist())
         if path == "/api/schedule":
             return self._json(self.player.schedule())
+        if path == "/api/projectors":
+            return self._json({"projectors": self.projectors.snapshot() if self.projectors else [],
+                               "media": bool(self.projectors and self.projectors.library.root)})
+        if path == "/api/media":
+            return self._json({"files": self.projectors.library.scan() if self.projectors else []})
         if path == "/api/sequences":
             show_dir = self.player.config.show_dir
             return self._json({"files": sorted(p.name for p in show_dir.glob("*.fseq"))})
@@ -142,11 +157,41 @@ class _Handler(BaseHTTPRequestHandler):
                 if not self._admin_ok():
                     return self._error(403, "Admin PIN required")
                 return ADMIN_POSTS[path](self, body)
+            elif path.startswith("/api/projectors/"):
+                if not self._admin_ok():
+                    return self._error(403, "Admin PIN required")
+                return self._projector_action(path, body)
             else:
                 return self._error(404, "Not found")
-        except (ValueError, TypeError, KeyError, OSError) as e:
+        except (ValueError, TypeError, KeyError, OSError, RuntimeError) as e:
             return self._error(400, _message(e))
         self._json(self.player.status())
+
+    def _projector_action(self, path: str, body: dict):
+        if not self.projectors:
+            return self._error(404, "No projectors configured")
+        parts = path.split("/")  # ["", "api", "projectors", n, action]
+        if len(parts) != 5 or not parts[3].isdigit():
+            return self._error(404, "Not found")
+        i, action, mgr = int(parts[3]), parts[4], self.projectors
+        if action == "playlist":
+            files = body.get("files")
+            if not isinstance(files, list) or len(files) > 500:
+                raise ValueError("files must be a list of up to 500 videos")
+            mgr.set_playlist(i, [str(f) for f in files], bool(body.get("shuffle", False)))
+        elif action == "play":
+            mgr.play(i, str(body["file"]) if body.get("file") else None)
+        elif action == "stop":
+            mgr.stop(i)
+        elif action == "sync":
+            mgr.sync(i, bool(body.get("remove_extra", True)))
+        elif action == "mode":
+            mgr.set_mode(i, str(body.get("mode", "")))
+        elif action == "power":
+            mgr.power(i, str(body.get("action", "")))
+        else:
+            return self._error(404, "Not found")
+        self._json({"projectors": mgr.snapshot()})
 
     # ---- admin actions ----
 

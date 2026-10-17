@@ -7,6 +7,10 @@ skip_controllers = ["FPP-Housenew"]   # the house Pi (.64) is broken
 http_port = 8080
 override_minutes = 30            # tablet changes revert to the show after this long
 allow_live_outside_window = false
+# Projector Pis (see projector/README.md). media_dir is the video library on this PC.
+# media_dir = 'C:\Users\david\Videos\AtmosFX'
+# [[projectors]] entries go at the end of the file (see below).
+
 # kiosk_pin = "2468"            # leaves kiosk mode (falls back to api_token); needed for kiosk mode
 # kiosk_seconds = 60             # how long a visitor's pattern plays
 # api_token = "change-me"        # when set, Off/Skip need it (?token=... or X-Api-Token)
@@ -59,3 +63,9 @@ Christmas = ["#FF0000", "#00A000"]
 # (the pixels run gamma 1.0). Regenerate with houselights.colors.led_rainbow(16).
 Rainbow = ["#FF0000", "#FF3400", "#FF6900", "#FFB400", "#B7FF00", "#07FF00", "#00FF7A", "#00FFDC",
            "#00C8FF", "#0085FF", "#003EFF", "#1200FF", "#4800FF", "#C100FF", "#FF0083", "#FF002B"]
+
+# Projectors (uncomment with media_dir above):
+# [[projectors]]
+# name = "Projector 1"
+# host = "projector1.local"
+# token = ""

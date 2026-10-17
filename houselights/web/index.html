@@ -56,6 +56,8 @@
   .ghost { min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: transparent; font-weight: 600; }
   .primary { min-height: 48px; padding: 0 18px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
   .danger { color: var(--danger); }
+  .primary:disabled { background: var(--panel-2); color: var(--muted); opacity: 1; }
+  main > * { min-width: 0; }
   .icon { min-width: 44px; min-height: 44px; padding: 0 8px; border-radius: 10px; border: 1px solid var(--line); background: transparent; font-size: 18px; }
   canvas { width: 100%; display: block; border-radius: 10px; background: #000; }
   .msg { color: var(--warn); font-size: 14px; }
@@ -63,7 +65,9 @@
   .msg:empty { display: none; }
   .hidden { display: none !important; }
   .tabs { position: sticky; top: 0; z-index: 5; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; margin: 0 -4px; background: var(--bg); border-radius: 14px; }
-  .tabs button { min-height: 46px; border-radius: 10px; border: 0; background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 600; }
+  .tabs { overflow-x: auto; scrollbar-width: none; grid-auto-columns: minmax(max-content, 1fr); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { min-height: 46px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--panel); color: var(--muted); font-size: 16px; font-weight: 600; white-space: nowrap; }
   .tabs button[aria-selected="true"] { background: var(--text); color: var(--bg); }
   .tab { display: grid; gap: 16px; }
   .field { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
@@ -104,6 +108,31 @@
   .save-bar { position: sticky; bottom: 8px; display: flex; gap: 10px; padding: 10px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 14px; align-items: center; }
   .save-bar span { flex: 1; font-weight: 600; }
 
+  /* projectors */
+  .proj { display: grid; gap: 12px; }
+  .proj-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .proj-name { font-weight: 800; font-size: 18px; flex: 1; }
+  .proj-now { font-weight: 600; }
+  .proj-block { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+  .proj-block h2 { margin: 0; }
+  .proj-pl, .lib-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .proj-pl li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+  .proj-pl li.current { border-color: var(--accent); background: rgba(255,122,26,.08); }
+  .proj-pl .name, .lib-files .name { font-weight: 600; overflow-wrap: anywhere; }
+  .proj-pl .sub, .lib-files .sub { color: var(--muted); font-size: 13px; }
+  .badge.warn { color: var(--warn); border-color: var(--warn); }
+  .progress { height: 10px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .8s linear; }
+  .row-btns { display: flex; gap: 6px; flex: none; }
+  .small { min-height: 36px; padding: 0 12px; font-size: 14px; }
+  .lib-coll { border: 1px solid var(--line); border-radius: 12px; padding: 0 12px; }
+  .lib-coll summary { min-height: 48px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; }
+  .lib-coll summary .meta { color: var(--muted); font-weight: 400; }
+  .lib-coll[open] { padding-bottom: 12px; }
+  .lib-variant { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 6px; color: var(--muted); font-weight: 700; font-size: 14px; }
+  .lib-files li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; }
+  .lib-list { display: grid; gap: 8px; }
+
   /* kiosk */
   .kiosk-only { display: none !important; }
   body.kiosk .kiosk-only { display: block !important; }
@@ -133,6 +162,7 @@
     <button role="tab" id="tabBtn-controls" aria-controls="tab-controls" aria-selected="true">Controls</button>
     <button role="tab" id="tabBtn-playlist" aria-controls="tab-playlist" aria-selected="false">Playlist</button>
     <button role="tab" id="tabBtn-schedule" aria-controls="tab-schedule" aria-selected="false">Schedule</button>
+    <button role="tab" id="tabBtn-projectors" aria-controls="tab-projectors" aria-selected="false" class="hidden">Projectors</button>
     <button role="tab" id="tabBtn-kiosk" aria-controls="tab-kiosk" aria-selected="false" class="admin-only hidden">Kiosk</button>
   </nav>
   <div class="msg" id="msg" role="status" aria-live="polite"></div>
@@ -276,6 +306,29 @@
     </div>
   </div>
 
+  <!-- ===== Projectors ===== -->
+  <div class="tab hidden" id="tab-projectors" role="tabpanel">
+    <div class="tab" id="projList"></div>
+    <div class="tab hidden" id="projEdit">
+      <section>
+        <h2 id="projEditTitle">Playlist</h2>
+        <label class="toggle"><input type="checkbox" id="projShuffle"> Shuffle the order each round</label>
+        <h2 style="margin-top:12px">In the playlist <span class="meta" id="projDraftMeta"></span></h2>
+        <ol class="proj-pl" id="projDraft"></ol>
+      </section>
+      <section>
+        <h2>Library</h2>
+        <input class="text" id="projSearch" type="search" placeholder="Search videos (e.g. skeleton, window)" aria-label="Search videos">
+        <div class="lib-list" id="projLibrary" style="margin-top:10px"></div>
+      </section>
+      <div class="save-bar">
+        <span>New videos copy over on the next sync (inside).</span>
+        <button class="ghost" id="projCancel">Cancel</button>
+        <button class="primary" id="projSave">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== Kiosk (admin) ===== -->
   <div class="tab hidden" id="tab-kiosk" role="tabpanel">
     <section>
@@ -379,7 +432,7 @@ $("unlockBtn").addEventListener("click", async () => {
 });
 
 // ---------- tabs ----------
-const TABS = ["controls", "playlist", "schedule", "kiosk"];
+const TABS = ["controls", "playlist", "schedule", "projectors", "kiosk"];
 function showTab(name) {
   if (!TABS.includes(name) || kioskMode) name = "controls";
   tab = name;
@@ -391,6 +444,7 @@ function showTab(name) {
   applyAdmin();
   if (name === "playlist") loadPlaylist();
   if (name === "schedule") loadSchedule();
+  if (name === "projectors") loadProjectors();
 }
 TABS.forEach(t => $("tabBtn-" + t).addEventListener("click", () => showTab(t)));
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
@@ -620,6 +674,223 @@ $("saveBtn").addEventListener("click", async () => {
     $("saveName").value = "";
     plKey = "";
     say(`Saved “${name}” to the playlist`, true);
+  } catch (e) { say(e.message); }
+});
+
+// ---------- projectors ----------
+let projectorCount = 0, projData = [], projKey = "", projLive = {}, projEditing = null, mediaFiles = [];
+const fmtBytes = b => b == null ? "?" : b === 0 ? "0 MB" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${Math.round(b / 1e6)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
+const mediaInfo = path => mediaFiles.find(f => f.path === path);
+const shortCollection = c => c.replace(/^Atmos(Fear|FEAR)FX\s*-\s*/i, "");
+function videoLabel(path) {
+  const f = mediaInfo(path);
+  const parts = path.split("/");
+  const title = f ? f.title : parts[parts.length - 1].replace(/\.[^.]+$/, "");
+  const where = (f ? [f.collection, f.variant].filter(x => x && x !== "Other") : parts.slice(0, -1)).map(shortCollection).join(" · ");
+  return { title, where };
+}
+
+async function loadProjectors() {
+  if (document.hidden || tab !== "projectors" || projEditing !== null) return;
+  let d;
+  try { d = await api("/api/projectors"); } catch { return; }
+  if (!mediaFiles.length && d.projectors.some(p => p.playlist.length)) {
+    mediaFiles = await api("/api/media").then(m => m.files).catch(() => []);
+  }
+  projData = d.projectors;
+  // Rebuild only when something structural changes; clocks and progress bars update in place.
+  const key = JSON.stringify([projData.map(p => [p.online, p.mode, p.mode_after_reboot, p.state, p.file, p.playlist, p.shuffle,
+    p.missing, p.extra.length, p.user_stopped, p.sync.state, p.sync.message, p.error, p.files_known]), isAdmin]);
+  if (key !== projKey) { projKey = key; renderProjectors(); }
+  for (const p of projData) if (projLive[p.index]) projLive[p.index](p);
+}
+
+function renderProjectors() {
+  projLive = {};
+  $("projList").replaceChildren(...projData.map(p => {
+    const modeText = !p.online ? "Offline" : p.mode_after_reboot && p.mode_after_reboot !== p.mode
+      ? `Switching to ${p.mode_after_reboot} mode…` : p.mode === "show" ? "Show mode · outside" : "Sync mode · inside";
+    const badge = el("span", { class: "badge" + (p.online && p.mode === "show" ? " playing" : ""), textContent: modeText });
+    const now = el("div", { class: "proj-now" });
+    const head = el("div", { class: "proj-head" },
+      el("span", { class: "dot " + (p.online ? (p.state === "playing" ? "show" : "idle") : "") }),
+      el("span", { class: "proj-name", textContent: p.name }), badge);
+
+    const card = el("section", { class: "proj" }, head, now);
+    if (!p.online) {
+      card.append(el("p", { class: "help", textContent: `Can't reach ${p.host}${p.error ? ` (${p.error})` : ""}. Is it powered on and on the Wi-Fi?` }));
+      return card;
+    }
+
+    // playback
+    if (isAdmin) card.append(el("div", { class: "row" },
+      el("button", { class: "ghost", textContent: "▶ Play playlist", disabled: !p.playlist.length || p.missing.length === p.playlist.length,
+        onclick: () => projAction(p.index, "play", {}) }),
+      el("button", { class: "ghost", textContent: "■ Stop (black)", disabled: p.state !== "playing",
+        onclick: () => projAction(p.index, "stop", {}) })));
+
+    // playlist
+    const plHead = el("h2", {}, "Playlist ", el("span", { class: "meta",
+      textContent: `${p.playlist.length} video${p.playlist.length === 1 ? "" : "s"}${p.shuffle ? " · shuffled" : ""}` }));
+    const list = el("ol", { class: "proj-pl" }, ...p.playlist.map(path => {
+      const { title, where } = videoLabel(path);
+      const missing = p.missing.includes(path);
+      return el("li", { class: path === p.file ? "current" : "" },
+        el("div", {}, el("div", { class: "name", textContent: title }), el("div", { class: "sub", textContent: where })),
+        missing ? el("span", { class: "badge warn", textContent: "needs sync" }) : null);
+    }));
+    card.append(el("div", { class: "proj-block" }, plHead,
+      p.playlist.length ? list : el("p", { class: "empty", textContent: "No videos yet." }),
+      isAdmin ? el("div", { class: "row" }, el("button", { class: "ghost", textContent: "Edit playlist", onclick: () => openProjEditor(p.index) })) : null));
+
+    // sync
+    const sync = el("div", { class: "proj-block" }, el("h2", { textContent: "Videos on the projector" }));
+    const syncText = el("p", { class: "help" });
+    const bar = el("div", { class: "progress hidden" }, el("div", {}));
+    sync.append(syncText, bar);
+    if (isAdmin && p.mode === "sync" && p.mode_after_reboot !== "show") {
+      sync.append(el("div", { class: "row" },
+        el("button", { class: "primary", textContent: p.sync.state === "syncing" ? "Syncing…" : "Sync now",
+          disabled: p.sync.state === "syncing" || (!p.missing.length && !p.extra.length),
+          onclick: () => projAction(p.index, "sync", {}) })));
+    }
+    card.append(sync);
+
+    // mode / power
+    if (isAdmin) {
+      const modeRow = el("div", { class: "row" });
+      if (p.mode === "sync" && p.mode_after_reboot !== "show") {
+        modeRow.append(el("button", { class: "primary", textContent: "Ready for outside", disabled: p.sync.state === "syncing",
+          onclick: () => {
+            const warn = p.missing.length ? `\n\n${p.missing.length} playlist video(s) aren't on it yet — sync first?` : "";
+            if (confirm(`Switch ${p.name} to show mode (read-only, safe to unplug) and reboot? It takes about a minute.${warn}`)) projAction(p.index, "mode", { mode: "show" });
+          } }));
+      } else if (p.mode === "show" && p.mode_after_reboot !== "sync") {
+        modeRow.append(el("button", { class: "ghost", textContent: "Switch to sync mode",
+          onclick: () => { if (confirm(`Switch ${p.name} to sync mode so videos can be copied? It reboots (about a minute). Do this inside.`)) projAction(p.index, "mode", { mode: "sync" }); } }));
+      }
+      const powerRow = el("div", { class: "row" });
+      powerRow.append(
+        el("button", { class: "ghost", textContent: "Restart", onclick: () => { if (confirm(`Restart ${p.name}?`)) projAction(p.index, "power", { action: "reboot" }); } }),
+        el("button", { class: "ghost", textContent: "Shut down", onclick: () => { if (confirm(`Shut ${p.name} down? Unplug it after about 20 seconds; plug it back in to start it.`)) projAction(p.index, "power", { action: "poweroff" }); } }));
+      card.append(el("div", { class: "proj-block" }, el("h2", { textContent: "Projector" }), modeRow, powerRow));
+    }
+    const disk = el("p", { class: "help", textContent: `${fmtBytes(p.disk_free)} free of ${fmtBytes(p.disk_total)} · ${p.host} · agent ${p.version || "?"}` });
+    card.append(disk);
+
+    projLive[p.index] = q => {
+      let txt;
+      if (q.state === "playing" && q.file) {
+        const { title, where } = videoLabel(q.file);
+        txt = `▶ ${title}${where ? ` (${where})` : ""}${q.position != null ? ` · ${fmtTime(q.position)}` : ""}`;
+      } else if (q.user_stopped) txt = "Stopped — black until the next show";
+      else if (!q.playlist.length) txt = "Black — add videos to the playlist";
+      else if (q.missing.length === q.playlist.length) txt = "Black — playlist videos need syncing";
+      else txt = "Black — waiting for show time";
+      now.textContent = txt;
+      const s = q.sync;
+      if (s.state === "syncing") {
+        const pct = s.total_bytes ? Math.round(100 * s.done_bytes / s.total_bytes) : 0;
+        syncText.textContent = `${s.message} · ${fmtBytes(s.done_bytes)} of ${fmtBytes(s.total_bytes)} (${pct}%)`;
+        bar.classList.remove("hidden");
+        bar.firstChild.style.width = pct + "%";
+      } else {
+        bar.classList.add("hidden");
+        const status = !q.files_known ? "Checking…"
+          : q.missing.length ? `${q.missing.length} video(s) to copy (${fmtBytes(q.missing_bytes)})${q.mode === "show" ? " — bring it inside and switch to sync mode" : ""}.`
+          : "All playlist videos are on the projector.";
+        const extra = q.extra.length ? ` ${q.extra.length} old video(s) will be removed on the next sync.` : "";
+        const last = s.state === "done" ? ` Last sync: ${s.message}.` : s.state === "error" ? ` Sync failed: ${s.message}` : "";
+        syncText.textContent = status + extra + last;
+      }
+    };
+    return card;
+  }));
+}
+
+async function projAction(i, action, body) {
+  try {
+    const d = await api(`/api/projectors/${i}/${action}`, body);
+    projData = d.projectors; projKey = ""; renderProjectors();
+    for (const p of projData) if (projLive[p.index]) projLive[p.index](p);
+    if (action === "mode" || action === "power") say("The projector is restarting — give it about a minute.", true);
+  } catch (e) { say(e.message); }
+}
+
+// ---- playlist editor ----
+let projDraft = [], projShuffle = false;
+async function openProjEditor(i) {
+  mediaFiles = await api("/api/media").then(m => m.files).catch(e => { say(e.message); return []; });
+  const p = projData.find(x => x.index === i);
+  projEditing = i;
+  projDraft = [...p.playlist];
+  projShuffle = p.shuffle;
+  $("projEditTitle").textContent = `Playlist for ${p.name}`;
+  $("projShuffle").checked = projShuffle;
+  $("projSearch").value = "";
+  $("projList").classList.add("hidden");
+  $("projEdit").classList.remove("hidden");
+  renderProjDraft(); renderLibrary();
+  scrollTo(0, 0);
+}
+function closeProjEditor() {
+  projEditing = null; projKey = "";
+  $("projEdit").classList.add("hidden");
+  $("projList").classList.remove("hidden");
+  loadProjectors();
+}
+
+function renderProjDraft() {
+  const total = projDraft.reduce((a, f) => a + ((mediaInfo(f) || {}).size || 0), 0);
+  $("projDraftMeta").textContent = `${projDraft.length} video${projDraft.length === 1 ? "" : "s"} · ${fmtBytes(total)}`;
+  $("projDraft").replaceChildren(...(projDraft.length ? projDraft.map((f, i) => {
+    const { title, where } = videoLabel(f);
+    const move = d => { [projDraft[i], projDraft[i + d]] = [projDraft[i + d], projDraft[i]]; renderProjDraft(); };
+    return el("li", {},
+      el("div", {}, el("div", { class: "name", textContent: title }), el("div", { class: "sub", textContent: where })),
+      el("span", { class: "row-btns" },
+        el("button", { class: "icon", textContent: "↑", "aria-label": "Move up", disabled: i === 0, onclick: () => move(-1) }),
+        el("button", { class: "icon", textContent: "↓", "aria-label": "Move down", disabled: i === projDraft.length - 1, onclick: () => move(1) }),
+        el("button", { class: "icon danger", textContent: "✕", "aria-label": `Remove ${title}`, onclick: () => { projDraft.splice(i, 1); renderProjDraft(); renderLibrary(); } })));
+  }) : [el("p", { class: "empty", textContent: "Add videos from the library below." })]));
+}
+
+function renderLibrary() {
+  const q = $("projSearch").value.trim().toLowerCase();
+  const match = f => !q || `${f.collection} ${f.variant} ${f.title}`.toLowerCase().includes(q);
+  const byColl = {};
+  for (const f of mediaFiles.filter(match)) ((byColl[f.collection] ||= {})[f.variant || ""] ||= []).push(f);
+  const inDraft = new Set(projDraft);
+  const colls = Object.keys(byColl).sort((a, b) => (a === "Other") - (b === "Other") || a.localeCompare(b));
+  $("projLibrary").replaceChildren(...(colls.length ? colls.map(c => {
+    const variants = byColl[c];
+    const count = Object.values(variants).reduce((a, v) => a + v.length, 0);
+    const det = el("details", { class: "lib-coll", open: !!q },
+      el("summary", {}, el("span", { textContent: shortCollection(c) }), el("span", { class: "meta", textContent: ` ${count}` })));
+    for (const v of Object.keys(variants).sort()) {
+      const files = variants[v];
+      const addAll = el("button", { class: "ghost small", textContent: "Add all",
+        onclick: () => { for (const f of files) if (!projDraft.includes(f.path)) projDraft.push(f.path); renderProjDraft(); renderLibrary(); } });
+      det.append(el("div", { class: "lib-variant" }, el("span", { textContent: v || "Videos" }), addAll));
+      det.append(el("ul", { class: "lib-files" }, ...files.map(f => el("li", {},
+        el("span", { class: "name", textContent: f.title }),
+        el("span", { class: "sub", textContent: fmtBytes(f.size) }),
+        el("button", { class: "ghost small", textContent: inDraft.has(f.path) ? "Added" : "Add", disabled: inDraft.has(f.path),
+          onclick: () => { projDraft.push(f.path); renderProjDraft(); renderLibrary(); } })))));
+    }
+    return det;
+  }) : [el("p", { class: "empty", textContent: mediaFiles.length ? "Nothing matches." : "No videos found — check media_dir in config.toml." })]));
+}
+
+$("projSearch").addEventListener("input", renderLibrary);
+$("projShuffle").addEventListener("change", () => { projShuffle = $("projShuffle").checked; });
+$("projCancel").addEventListener("click", closeProjEditor);
+$("projSave").addEventListener("click", async () => {
+  try {
+    const d = await api(`/api/projectors/${projEditing}/playlist`, { files: projDraft, shuffle: projShuffle });
+    projData = d.projectors;
+    say("Projector playlist saved", true);
+    closeProjEditor();
   } catch (e) { say(e.message); }
 });
 
@@ -959,6 +1230,8 @@ $("schedSave").addEventListener("click", async () => {
     isAdmin = opts.admin;
     tokenRequired = opts.token_required;
     kioskAvailable = opts.kiosk_available;
+    projectorCount = opts.projectors || 0;
+    $("tabBtn-projectors").classList.toggle("hidden", !projectorCount);
     kioskSeconds = opts.kiosk_seconds || 60;
     document.querySelectorAll(".kioskLen").forEach(n => { n.textContent = kioskSeconds % 60 ? `${kioskSeconds} seconds` : `${kioskSeconds / 60} minute${kioskSeconds === 60 ? "" : "s"}`; });
     $("kioskUnavailable").classList.toggle("hidden", kioskAvailable);
@@ -975,6 +1248,7 @@ $("schedSave").addEventListener("click", async () => {
   setInterval(drawPreview, 250);
   setInterval(loadPlaylist, 1000);
   setInterval(() => loadSchedule(), 5000);
+  setInterval(loadProjectors, 2000);
 })();
 </script>
 </body>

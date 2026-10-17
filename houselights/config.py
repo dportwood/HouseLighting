@@ -81,6 +81,23 @@ class Item:
 
 
 @dataclass
+class ProjectorConfig:
+    """A projector Pi running projector/hl_projector.py."""
+
+    name: str
+    host: str
+    port: int = 8090
+    token: str = ""
+    # Edited from the page and kept in show.json:
+    playlist: list[str] = field(default_factory=list)  # paths relative to media_dir (posix style)
+    shuffle: bool = False
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.host}:{self.port}"
+
+
+@dataclass
 class Config:
     show_dir: Path
     fps: float = 20.0
@@ -98,6 +115,8 @@ class Config:
     presets: dict[str, list[Color]] = field(default_factory=dict)
     live_defaults: dict = field(default_factory=dict)
     state_file: Path | None = None
+    media_dir: Path | None = None  # videos for the projectors (e.g. the AtmosFX folder)
+    projectors: list[ProjectorConfig] = field(default_factory=list)
 
     def in_window(self, now: datetime) -> bool:
         return any(w.contains(now) for w in self.windows)
@@ -154,7 +173,16 @@ def parse_config(raw: dict, base_dir: Path = Path(".")) -> Config:
         presets=presets,
         live_defaults=live,
         state_file=(base_dir / state_file) if state_file else None,
+        media_dir=Path(raw["media_dir"]) if raw.get("media_dir") else None,
+        projectors=[_parse_projector(p) for p in raw.get("projectors", [])],
     )
+
+
+def _parse_projector(p: dict) -> ProjectorConfig:
+    if not p.get("name") or not p.get("host"):
+        raise ValueError("Each [[projectors]] entry needs a name and a host")
+    return ProjectorConfig(name=str(p["name"]), host=str(p["host"]), port=int(p.get("port", 8090)),
+                           token=str(p.get("token", "")))
 
 
 def parse_window(w: dict) -> Window:
@@ -296,6 +324,10 @@ def load_state(cfg: Config) -> None:
     cfg.windows = [parse_window(w) for w in raw.get("windows", [])]
     cfg.playlist = [parse_item(i, cfg.show_dir) for i in raw.get("playlist", [])]
     cfg.shuffle = bool(raw.get("shuffle", cfg.shuffle))
+    for proj in cfg.projectors:
+        saved = raw.get("projectors", {}).get(proj.name, {})
+        proj.playlist = [str(f) for f in saved.get("playlist", [])]
+        proj.shuffle = bool(saved.get("shuffle", False))
 
 
 def save_state(cfg: Config) -> None:
@@ -306,6 +338,7 @@ def save_state(cfg: Config) -> None:
         "windows": [window_to_dict(w) for w in cfg.windows],
         "shuffle": cfg.shuffle,
         "playlist": [item_to_dict(i, cfg.show_dir) for i in cfg.playlist],
+        "projectors": {p.name: {"playlist": p.playlist, "shuffle": p.shuffle} for p in cfg.projectors},
     }
     tmp = cfg.state_file.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")

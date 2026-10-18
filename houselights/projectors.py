@@ -40,6 +40,7 @@ DISCOVERY_PORT = 8091
 DISCOVERY_QUERY = b"HLPROJECTOR?"
 RESCAN_SECONDS = 30  # at most this often while a projector isn't answering
 LIVE_SECONDS = 180  # an agent heard from within this long counts as present
+FORGET_SECONDS = 600  # Find projectors drops agents not heard from in this long (unless added)
 
 
 def broadcast_targets() -> list[str]:
@@ -337,8 +338,13 @@ class ProjectorManager:
         return seen is not None and now - seen < LIVE_SECONDS
 
     def discovered_list(self) -> list[dict]:
+        """Agents found on the network; ones gone quiet for FORGET_SECONDS are dropped unless added."""
+        now = self.clock()
         with self._lock:
             ids = {p.id for p in self.config.projectors}
+            for agent_id, a in list(self.discovered.items()):
+                if agent_id not in ids and now - a.get("seen_t", now) > FORGET_SECONDS:
+                    del self.discovered[agent_id]
             return [{k: v for k, v in a.items() if k != "seen_t"} | {"added": a["id"] in ids}
                     for a in self.discovered.values()]
 
@@ -432,7 +438,9 @@ class ProjectorManager:
             ready = bool(available)
             now = self.clock()
             want_start = in_window and not st.user_stopped and ready and not playing and not syncing and now >= st.next_try
-            want_stop = not in_window and playing and st.started_by == "schedule"
+            # Black after the show, including projectors that were already playing when the
+            # player (re)started; only a manual Play outside show hours is left alone.
+            want_stop = not in_window and playing and st.started_by != "manual"
         try:
             if want_start:
                 st.status = client.play(available, cfg.shuffle)

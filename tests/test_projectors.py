@@ -344,3 +344,43 @@ def test_updated_agent_with_new_id_is_matched_by_name_not_added_twice(tmp_path, 
     mgr.found([{**other, "name": "Projector 1", "id": "newid0000000", "address": "10.0.0.5"}])
     assert (proj.id, proj.address) == ("newid0000000", "10.0.0.5")
     assert all("seen_t" not in d for d in mgr.discovered_list())
+
+
+
+def test_find_projectors_forgets_agents_gone_quiet_unless_added(tmp_path, library):
+    clock = {"t": 1000.0}
+    proj = ProjectorConfig("Projector 1", id="real00000001", address="10.0.0.5")
+    mgr = make_manager(tmp_path, 1, library, {"on": False}, projectors=[proj])
+    mgr.clock = lambda: clock["t"]
+    base = {"port": 8090, "mode": "show", "version": "0.3.0", "hostname": "x"}
+    mgr.found([{**base, "name": "Projector 1", "id": "real00000001", "address": "10.0.0.5"},
+               {**base, "name": "Test stand-in", "id": "test00000002", "address": "10.0.0.24"}])
+    assert len(mgr.discovered_list()) == 2
+    clock["t"] += 11 * 60  # neither heard from since
+    assert [d["id"] for d in mgr.discovered_list()] == ["real00000001"]  # added ones stay listed
+
+
+
+def test_projector_playing_when_the_player_restarted_still_goes_black_after_the_show(tmp_path, agent, library):
+    a, port = agent
+    call(port, "PUT", "/api/library/Loose.mov", library.path("Loose.mov").read_bytes())
+    call(port, "POST", "/api/play", {"files": ["Loose.mov"]})  # playing before this manager existed
+    window = {"on": True}
+    mgr = make_manager(tmp_path, port, library, window)
+    mgr.config.projectors[0].playlist = ["Loose.mov"]
+    mgr.poll_once()
+    assert mgr.snapshot()[0]["state"] == "playing"
+    window["on"] = False
+    mgr.poll_once()
+    assert mgr.snapshot()[0]["state"] == "idle"
+
+
+def test_manual_play_outside_show_hours_is_left_alone(tmp_path, agent, library):
+    a, port = agent
+    call(port, "PUT", "/api/library/Loose.mov", library.path("Loose.mov").read_bytes())
+    mgr = make_manager(tmp_path, port, library, {"on": False})
+    mgr.config.projectors[0].playlist = ["Loose.mov"]
+    mgr.poll_once()
+    mgr.play(0)
+    mgr.poll_once()
+    assert mgr.snapshot()[0]["state"] == "playing"

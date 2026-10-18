@@ -1,45 +1,26 @@
 # Roadmap
 
-## 1. DDP spike — done (2026-10-12)
+## Done
 
-* Layout loaded from the xLights show folder matches the FPP port configs.
-* Live chase and `.fseq` playback sent to both remotes (.45, .239) in remote
-  mode; packets received with no errors after fixing per-packet sequence numbers.
+* **Player** — xLights layout, DDP to the FPP controllers, `.fseq` playback and
+  live effects, scheduled show times, start on logon, control window.
+* **Control page** — Controls (themes, per-string looks, preview), Playlist and
+  Schedule editing (kept in `show.json`), admin PIN.
+* **Kiosk** — visitors make a pattern that plays for a minute; PIN to leave.
+* **Projectors** — Pis play AtmosFX videos: sync mode inside, read-only show
+  mode outside, follow the show schedule, found by network discovery.
+* **House controller** back on line at 172.16.17.10.
 
-## 2. Player MVP — in progress
+## Next
 
-Done:
-* `serve`: schedule windows (incl. past midnight), shuffled playlist of `.fseq`
-  files and live effects, 20 fps frame loop.
-* Live effects: chase, fade, twinkle, solid; brightness scaling.
-* HTTP API + tablet page (presets, colors, effect, speed, band, brightness,
-  preview); tablet changes expire back to the show; optional admin token.
-* Tested in dry-run (page at phone and tablet sizes; steady 20 fps on fseq playback).
-
-Still to do:
-* ~~Run `serve` against the real lights~~ — ran the show from 2026-10-12 17:00.
-* ~~Start on boot~~ — logon scheduled task (`scripts/install-startup-task.ps1`).
-* ~~Cut over from xSchedule~~ — xSchedule no longer started; its config is untouched.
-* ~~Schedule and playlist editing from the page~~ — Schedule tab, playlist edit
-  mode, Save to playlist; stored in `show.json`.
-* ~~Local start/stop/status~~ — `houselights control` window + desktop shortcut.
-* ~~Projector video~~ — projector Pis play AtmosFX videos ([projector/README.md](../projector/README.md)):
-  sync mode inside to copy videos, read-only show mode outside, follows the show schedule.
-* Multiple playlists (e.g. Halloween / Christmas) chosen per show time.
-* Consider a Pi 4/5 replacing the dead .64 so the show doesn't depend on this PC.
-* Optionally send FPP MultiSync so remotes can play local `.fseq` copies.
-
-## 3. Camera pixel mapping and image overlay
-
-* Fixed camera photographs the house while the player flashes binary-coded
-  on/off patterns (~12–15 patterns + all-on/all-off references).
-* Decode each pixel's (x, y) in the photo; store a pixel map.
-* Effects sample an image, gradient, video or shader at those coordinates.
-* xLights' "Generate Custom Model" does similar from video but is an
-  interactive wizard; we automate it ourselves.
-
-## 4. Outdoor tablet
-
-* Web UI served by the player, Android tablet in kiosk mode (e.g. Fully Kiosk).
-* Big swatches, preset palettes, speed/effect buttons; live preview on the photo.
-* Restricted to colors/effects only; separate Wi-Fi/VLAN since it's reachable from outside.
+* **Multiple playlists** (e.g. Halloween / Christmas), each picked by its show times.
+* **Projector boot to black** — a fresh projector card shows boot messages for a
+  few seconds at power-up. Hiding them (`quiet`, no `console=tty1`) made the Pi 3
+  fail to come back in show mode; find out why before hiding them again.
+* **Camera pixel mapping and image overlay** — a fixed camera photographs the
+  house while the player flashes binary-coded patterns (~12–15 plus all-on/off),
+  giving each pixel's (x, y) in the photo; effects then sample an image, video or
+  shader at those points. (xLights' "Generate Custom Model" does similar from
+  video, but only as an interactive wizard.)
+* **Update xLights** with the house controller's new address (172.16.17.10) so
+  `controller_ips` isn't needed.

@@ -4,8 +4,8 @@
 #   sudo bash setup.sh [name]        e.g. sudo bash setup.sh "Projector 1"
 #
 # Re-running is safe. The Pi needs internet access the first time (apt).
-# Afterwards it boots straight to a black screen running the projector agent on
-# port 8090, in sync (writable) mode. Switch to show (read-only) mode from the
+# Afterwards it boots (briefly showing boot messages) to a black screen running
+# the projector agent on port 8090, in sync (writable) mode. Switch to show (read-only) mode from the
 # HouseLighting app before taking it outside.
 set -euo pipefail
 
@@ -67,13 +67,13 @@ cat > /etc/avahi/services/hl-projector.service <<'AVAHI'
 </service-group>
 AVAHI
 
-echo "== Black screen at boot: no splash, no boot text, no login prompt on HDMI"
+echo "== HDMI: no splash or login prompt; black once the agent starts"
 CMDLINE=/boot/firmware/cmdline.txt; [ -f "$CMDLINE" ] || CMDLINE=/boot/cmdline.txt
 CONFIGTXT=/boot/firmware/config.txt; [ -f "$CONFIGTXT" ] || CONFIGTXT=/boot/config.txt
-for opt in quiet loglevel=1 logo.nologo consoleblank=0 vt.global_cursor_default=0; do
-  grep -qw -- "$opt" "$CMDLINE" || sed -i "1 s/\$/ $opt/" "$CMDLINE"
-done
-sed -i 's/ console=tty1//' "$CMDLINE"
+# Boot messages stay on the HDMI console (console=tty1): with them hidden
+# (quiet loglevel=1, no console=tty1) the Pi 3 failed to come back in show mode.
+grep -qw -- "consoleblank=0" "$CMDLINE" || sed -i "1 s/\$/ consoleblank=0/" "$CMDLINE"
+grep -qw -- "console=tty1" "$CMDLINE" || sed -i "1 s/\$/ console=tty1/" "$CMDLINE"
 grep -q '^disable_splash=1' "$CONFIGTXT" || echo 'disable_splash=1' >> "$CONFIGTXT"
 # Keep HDMI on even if the projector is switched on after the Pi
 grep -q '^hdmi_force_hotplug=1' "$CONFIGTXT" || echo 'hdmi_force_hotplug=1' >> "$CONFIGTXT"

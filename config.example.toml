@@ -1,20 +1,22 @@
 # Copy to config.toml and adjust. Times are local (24h).
+# Top-level settings must come before the first [section].
 
 show_dir = '\\THEHUB\Media\xlights'   # xLights show folder (UNC path: mapped drives may not be up at logon)
+# controller_ips = { "FPP-Housenew" = "172.16.17.10" }   # override addresses from xLights, by controller name
+skip_controllers = []                 # controllers (name or IP) never sent to
 fps = 20
-skip_controllers = ["FPP-Housenew"]   # the house Pi (.64) is broken
 
 http_port = 8080
-override_minutes = 30            # tablet changes revert to the show after this long
+override_minutes = 30            # live changes revert to the show after this long
 allow_live_outside_window = false
-# Projector Pis (see projector/README.md). media_dir is the video library on this PC.
-# media_dir = 'C:\Users\david\Videos\AtmosFX'
-# [[projectors]] entries go at the end of the file (see below).
-
-# kiosk_pin = "2468"            # leaves kiosk mode (falls back to api_token); needed for kiosk mode
+# api_token = "change-me"        # admin PIN: locks editing and admin buttons
+# kiosk_pin = "2468"             # leaves kiosk mode (falls back to api_token); needed for kiosk mode
 # kiosk_seconds = 60             # how long a visitor's pattern plays
-# api_token = "change-me"        # when set, Off/Skip need it (?token=... or X-Api-Token)
 
+# Video library for the projector Pis (see projector/README.md)
+# media_dir = 'C:\Users\david\Videos\AtmosFX'
+
+# The schedule and playlist below only seed show.json; after that they're edited on the page.
 shuffle = true
 
 [[windows]]
@@ -22,7 +24,8 @@ days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 start = "16:50"
 end = "23:15"
 
-# Playlist: rendered xLights sequences and/or live effects (chase, fade, twinkle, strobe, solid).
+# Playlist items: rendered xLights sequences ("fseq") or live effects
+# (chase, fade, twinkle, strobe, solid). Optional: name, brightness (percent).
 [[playlist]]
 type = "fseq"
 file = "Halloween Chase.fseq"
@@ -39,18 +42,18 @@ name = "Witch Twinkle"
 type = "effect"
 effect = "twinkle"
 seconds = 120
-colors = ["#400080", "#00C000"]   # Witch theme
+colors = ["#400080", "#00C000"]
 speed = 100
-brightness = 100         # percent; playlist items each have their own
+brightness = 100
 
-# What the tablet starts from.
+# Where the Controls tab starts.
 [live]
 effect = "chase"
 colors = ["#400080", "#FF3000"]
 speed = 40
 band = 8
 
-# Theme buttons on the tablet.
+# Theme buttons.
 [presets]
 Halloween = ["#400080", "#FF3000"]
 "Pumpkin" = ["#FF3000", "#FF7A00", "#801500"]
@@ -59,13 +62,12 @@ Christmas = ["#FF0000", "#00A000"]
 "Candy Cane" = ["#FF0000", "#FFFFFF"]
 "Warm White" = ["#FFB060"]
 "Red White Blue" = ["#FF0000", "#FFFFFF", "#0030FF"]
-# Rainbow: 16 hues evenly spaced by how different they look, as LED values
-# (the pixels run gamma 1.0). Regenerate with houselights.colors.led_rainbow(16).
+# 16 hues evenly spaced by how different they look, as LED values (the pixels
+# run gamma 1.0). Regenerate with houselights.colors.led_rainbow(16).
 Rainbow = ["#FF0000", "#FF3400", "#FF6900", "#FFB400", "#B7FF00", "#07FF00", "#00FF7A", "#00FFDC",
            "#00C8FF", "#0085FF", "#003EFF", "#1200FF", "#4800FF", "#C100FF", "#FF0083", "#FF002B"]
 
-# Projectors (uncomment with media_dir above):
-# Projectors can also just be added from the page (Projectors -> Scan -> Add).
+# Projectors are normally added from the page (Projectors -> Scan -> Add); listing one here is optional.
 # [[projectors]]
 # name = "Projector 1"          # the agent's name; matched when scanning
 # host = "projector1.local"     # optional

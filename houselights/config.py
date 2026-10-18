@@ -111,6 +111,7 @@ class Config:
     show_dir: Path
     fps: float = 20.0
     skip_controllers: list[str] = field(default_factory=list)
+    controller_ips: dict[str, str] = field(default_factory=dict)  # controller name -> IP, overriding xLights
     http_host: str = "0.0.0.0"
     http_port: int = 8080
     override_minutes: float = 30.0
@@ -169,6 +170,7 @@ def parse_config(raw: dict, base_dir: Path = Path(".")) -> Config:
         show_dir=show_dir,
         fps=float(raw.get("fps", 20)),
         skip_controllers=list(raw.get("skip_controllers", [])),
+        controller_ips={str(k): str(v) for k, v in raw.get("controller_ips", {}).items()},
         http_host=raw.get("http_host", "0.0.0.0"),
         http_port=int(raw.get("http_port", 8080)),
         override_minutes=float(raw.get("override_minutes", 30)),

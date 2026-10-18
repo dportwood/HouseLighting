@@ -156,6 +156,7 @@ def _serve(args) -> None:
         save_state(cfg)  # first run: the schedule/playlist from config.toml becomes show.json
         print(f"Created {cfg.state_file} from {args.config}")
     layout = load_layout(cfg.show_dir)
+    layout.set_ips(cfg.controller_ips)
     out = NullOutput() if args.dry_run else Output(layout, only=args.only, skip=(args.skip or []) + cfg.skip_controllers)
     if args.dry_run:
         print("Dry run: nothing is sent to the controllers")

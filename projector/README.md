@@ -1,99 +1,89 @@
 # Projector Pi
 
-A Raspberry Pi (3B or newer) on a projector's HDMI that plays videos from the
-HouseLighting player. It boots straight to a black screen and waits for
-commands; nothing else is ever drawn on the projector.
+A Raspberry Pi (3B or newer) on a projector's HDMI that plays videos for the
+HouseLighting player. After boot it shows black and waits for commands.
 
-It has two modes, switched from the app's **Projectors** tab (each switch reboots, ~1 minute):
+It has two modes, switched from the app's **Projectors** tab (each switch
+reboots, about a minute):
 
 | Mode | Where | What it does |
 |---|---|---|
 | **Sync** | inside | Writable. The app copies the playlist's videos over and removes old ones. |
-| **Show** | outside | Read-only (overlay file system): safe to lose power every day. Plays and stops on command; refuses to change videos. |
+| **Show** | outside | Read-only (overlay file system), so losing power every day is safe. Plays and stops on command; won't change videos. |
 
 Outside, the app plays the projector's playlist during the light show's hours
-and blacks it out after. When the Pi powers up it's picked up again within a few
-seconds. Reordering or trimming the playlist works outside; **new** videos need a
-trip inside to sync.
+and blacks it out afterwards; after a power-up it's picked up again within a few
+seconds. Reordering or trimming the playlist works outside. New videos need a
+trip inside to sync; until then the projector plays the ones it has.
 
 ## Build the SD card (once per projector)
 
-1. **Raspberry Pi Imager** → Device *Raspberry Pi 3* → OS *Raspberry Pi OS (other) →
-   Raspberry Pi OS Lite (64-bit)* → your SD card (32 GB+ holds the whole AtmosFX library).
-2. **Edit settings** before writing:
-   - hostname `projector1` (then `projector2`, … for more)
+1. **Raspberry Pi Imager**: Device *Raspberry Pi 3*, OS *Raspberry Pi OS (other) →
+   Raspberry Pi OS Lite (64-bit)*, your SD card (32 GB+ holds the whole library).
+2. In the OS customisation settings:
+   - hostname `projector1` (`projector2`, … for more)
    - username `pi` and a password
    - Wi-Fi network, password and country; time zone America/Chicago
-   - Services: **enable SSH** (password authentication)
-3. Put the card in the Pi, connect the projector (or any HDMI screen) and power. First boot takes a few minutes.
-4. From this PC (in the repo folder), run — it asks for the Pi's password:
+   - Services: **enable SSH** with password authentication
+3. Put the card in the Pi, connect the projector (or any HDMI screen) and power
+   it. The first boot takes a few minutes and reboots once.
+4. From the repo folder on the PC (asks for the Pi's password):
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\setup-projector.ps1 -PiHost projector1.local -Name "Projector 1"
    ```
 
-   It installs mpv and the agent, makes the Pi boot to black with no login prompt
-   on HDMI, cuts down SD card writes, and starts the agent on port 8090 in sync mode.
-   (No PC? Copy `hl_projector.py` and `setup.sh` to the Pi and run `sudo bash setup.sh "Projector 1"`.)
+   Add `-User yourname` if the Pi's user isn't `pi`. It installs mpv and the
+   agent, removes the login prompt from HDMI, cuts down SD card writes, and starts
+   the agent on port 8090 in sync mode. (Without the PC script: copy
+   `hl_projector.py` and `setup.sh` to the Pi and run `sudo bash setup.sh "Projector 1"`.)
 
-5. **Check video playback on the projector** — the Pi 3 decodes H.264 in hardware
-   and there are a few ways to drive the screen, so test once:
+## Add it to the app
 
-   ```bash
-   ssh pi@projector1.local
-   sudo systemctl stop hl-projector
-   sudo python3 /opt/hl-projector/hl_projector.py --probe "/var/lib/hl-projector/media/<some 1080p video>.mp4"
-   sudo systemctl start hl-projector
-   ```
+1. `media_dir` in `config.toml` points at the video library (top level, above
+   the first `[section]`), e.g. `media_dir = 'C:\Users\david\Videos\AtmosFX'`.
+2. **Projectors** tab → **Scan for projectors** → **Add**.
 
-   (Sync a video from the app first, or `scp` one over.) It plays the video 20 s
-   per setting and prints dropped frames; put the best one in `/etc/hl-projector.json`
-   as `"mpv_profile"` if it isn't `gpu-drm-hw`, then `sudo systemctl restart hl-projector`.
+No addresses needed. The app finds agents by broadcast (UDP 8091) and by the
+announcements they send after booting, matches them by id (or name), and
+remembers the last address in `show.json`. If a projector stops answering it
+rescans, so a new DHCP address is picked up within seconds.
 
-## Hook it up to the app
-
-1. In `config.toml` on the PC, at the top level (above the first `[section]`), point at the video library:
-
-   ```toml
-   media_dir = 'C:\Users\david\Videos\AtmosFX'
-   ```
-
-   Restart the player (House Lights control window → Restart).
-2. **Projectors** tab → **Scan for projectors** → **Add** next to it.
-
-That's all — no IP addresses. The app finds projectors by broadcast (UDP port
-8091) and by their announcements when they boot, and follows them if DHCP hands
-out a new address: a projector that stops answering triggers a rescan, and it
-remembers the last address in `show.json`.
-
-You can also list a projector in `config.toml` instead (handy for a token):
+A projector can also be listed in `config.toml` (useful with a token):
 
 ```toml
 [[projectors]]
-name = "Projector 1"          # must match the name given to setup.sh
-host = "projector1.local"     # optional; tried first, then the address found by scanning
-# token = "..."               # if you set "token" in the Pi's /etc/hl-projector.json
+name = "Projector 1"          # the name given to setup.sh
+host = "projector1.local"     # optional; tried first, then the scanned address
+# token = "..."               # if "token" is set in the Pi's /etc/hl-projector.json
 ```
 
-## The routine
+## Routine
 
-1. **Inside** (projector in sync mode, on the Wi-Fi): Projectors → **Edit playlist** →
-   pick videos from the library (by collection and version — Window, Wall, TV, …) → Save → **Sync now**.
-2. **Ready for outside** → it switches to show mode and reboots. Unplug it once it's back
-   (or any time — show mode doesn't mind), take it outside, plug it in.
-3. During show hours it plays; after, it goes black. **Stop** blacks it out until the next show.
-4. To add new videos: bring it in, **Switch to sync mode**, edit, **Sync now**, **Ready for outside**.
+1. **Inside**, in sync mode: **Edit playlist** → pick videos (by collection and
+   version: Window, Wall, TV, …) → **Save** → **Sync now**.
+2. **Ready for outside** → it switches to show mode and reboots. Take it out and plug it in.
+3. During show hours it plays; afterwards it's black. **Stop** blacks it out
+   until the next show.
+4. New videos: bring it in → **Switch to sync mode** → edit → **Sync now** → **Ready for outside**.
 
-Use **Shut down** before unplugging in sync mode if you can (it's safe in show mode either way).
+In sync mode, use **Shut down** before unplugging if you can; in show mode
+unplugging is always safe.
 
 ## Notes
 
-- If a scan finds nothing: the PC and the Pi must be on the same network, and
-  Windows Firewall must allow Python on private networks (it asks the first time).
-- Agent API and options: see the top of `hl_projector.py`. Config: `/etc/hl-projector.json`
-  (`name`, `port`, `token`, `media_dir`, `mpv_profile`, `mpv_extra`, `audio`).
-- Logs: `journalctl -u hl-projector` (kept in memory only; gone after a reboot).
-- SSH works in both modes, but in show mode any change you make is thrown away at the next reboot.
-- More projectors: repeat with `projector2`, or copy a finished SD card and change its
-  hostname (`sudo raspi-config` → System → Hostname) and `name` in `/etc/hl-projector.json`.
-- Audio is off by default (`"audio": true` sends it out HDMI).
+* Scan finds nothing? The PC and Pi must be on the same network, and Windows
+  Firewall must allow Python on private networks.
+* `/etc/hl-projector.json` on the Pi: `name`, `port`, `token`, `media_dir`,
+  `mpv_profile`, `mpv_extra`, `audio` (off by default; `true` sends it out HDMI).
+  The agent's API is described at the top of `hl_projector.py`.
+* Playback is hardware H.264 through mpv (`mpv_profile` `gpu-drm-hw`), which
+  plays the AtmosFX 480p and 1080p files smoothly on a Pi 3B. To compare other
+  settings: stop the service and run
+  `sudo python3 /opt/hl-projector/hl_projector.py --probe "<video>"`.
+* Boot messages appear on the projector for a few seconds at power-up (see the
+  roadmap). If a Pi doesn't come back, they show where it stopped.
+* Logs: `journalctl -u hl-projector` (in memory only; cleared by a reboot).
+* SSH works in both modes, but in show mode changes are thrown away at the next reboot.
+* More projectors: repeat with `projector2`, or copy a finished card and change
+  its hostname (`sudo raspi-config` → System → Hostname) and `name` in `/etc/hl-projector.json`.

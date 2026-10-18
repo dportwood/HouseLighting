@@ -67,6 +67,17 @@ class Layout:
                 return c
         raise KeyError(f"No controller named or at {name_or_ip!r}")
 
+    def set_ips(self, ips: dict[str, str]) -> None:
+        """Point controllers at different addresses than xlights_networks.xml (by controller name)."""
+        names = {c.name for c in self.controllers}
+        unknown = set(ips) - names
+        if unknown:
+            raise KeyError(f"controller_ips: no controller named {', '.join(sorted(unknown))} "
+                           f"(controllers are {', '.join(sorted(names))})")
+        for c in self.controllers:
+            if c.name in ips:
+                c.ip = ips[c.name]
+
     def model(self, name: str) -> Model:
         for m in self.models:
             if m.name == name:

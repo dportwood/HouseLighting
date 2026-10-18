@@ -146,3 +146,11 @@ def test_led_rainbow_is_distinct_saturated_and_starts_red():
         preset = tomllib.load(f)["presets"]["Rainbow"]
     assert [effects.parse_color(h) for h in preset] == colors
     assert led_value((255, 128, 0)) == (255, 55, 0)  # screen orange -> LED orange
+
+
+def test_controller_ips_override_the_xlights_addresses(layout):
+    layout.set_ips({"A": "172.16.17.10"})
+    assert layout.controller("A").ip == "172.16.17.10"
+    assert layout.controller("B").ip == "10.0.0.2"
+    with pytest.raises(KeyError, match="no controller named"):
+        layout.set_ips({"Nope": "1.2.3.4"})

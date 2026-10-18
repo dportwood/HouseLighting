@@ -85,5 +85,9 @@ unplugging is always safe.
   roadmap). If a Pi doesn't come back, they show where it stopped.
 * Logs: `journalctl -u hl-projector` (in memory only; cleared by a reboot).
 * SSH works in both modes, but in show mode changes are thrown away at the next reboot.
-* More projectors: repeat with `projector2`, or copy a finished card and change
-  its hostname (`sudo raspi-config` → System → Hostname) and `name` in `/etc/hl-projector.json`.
+* More projectors: flash a card per projector (`projector2`, `projector3`, …),
+  run the setup script with a matching name (`-PiHost projector2.local -Name "Projector 2"`),
+  then Scan → Add. In **Edit playlist**, *Start from …'s playlist* copies another
+  projector's videos. A copied card also works once its hostname
+  (`sudo raspi-config` → System → Hostname) and `name` in `/etc/hl-projector.json`
+  are changed: the agent's id includes the hostname.

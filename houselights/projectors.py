@@ -39,6 +39,7 @@ UPLOAD_CHUNK = 1024 * 1024
 DISCOVERY_PORT = 8091
 DISCOVERY_QUERY = b"HLPROJECTOR?"
 RESCAN_SECONDS = 30  # at most this often while a projector isn't answering
+LIVE_SECONDS = 180  # an agent heard from within this long counts as present
 
 
 def broadcast_targets() -> list[str]:
@@ -306,24 +307,40 @@ class ProjectorManager:
         return found
 
     def found(self, agents: list[dict]) -> None:
-        """Record agents heard from, and point configured projectors at them (by id, else name)."""
+        """Record agents heard from, and point configured projectors at them.
+
+        Matched by agent id; by name when the projector has no id yet, or when its
+        id hasn't been heard lately (e.g. the agent was updated and its id changed)
+        and no other projector already owns the new one.
+        """
         changed = False
+        now = self.clock()
         with self._lock:
             for a in agents:
-                self.discovered[a["id"]] = {**a, "seen": datetime.now().isoformat(timespec="seconds")}
+                self.discovered[a["id"]] = {**a, "seen": datetime.now().isoformat(timespec="seconds"), "seen_t": now}
+                owned = {p.id for p in self.config.projectors if p.id}
                 for cfg in self.config.projectors:
-                    if not (cfg.id == a["id"] or (not cfg.id and cfg.name.casefold() == a["name"].casefold())):
+                    by_id = cfg.id == a["id"]
+                    by_name = (cfg.name.casefold() == a["name"].casefold() and a["id"] not in owned
+                               and (not cfg.id or not self._live(cfg.id, now)))
+                    if not (by_id or by_name):
                         continue
                     if (cfg.id, cfg.address, cfg.port) != (a["id"], a["address"], a["port"]):
                         cfg.id, cfg.address, cfg.port = a["id"], a["address"], a["port"]
                         changed = True
+                    break
             if changed:
                 save_state(self.config)
+
+    def _live(self, agent_id: str, now: float) -> bool:
+        seen = self.discovered.get(agent_id, {}).get("seen_t")
+        return seen is not None and now - seen < LIVE_SECONDS
 
     def discovered_list(self) -> list[dict]:
         with self._lock:
             ids = {p.id for p in self.config.projectors}
-            return [{**a, "added": a["id"] in ids} for a in self.discovered.values()]
+            return [{k: v for k, v in a.items() if k != "seen_t"} | {"added": a["id"] in ids}
+                    for a in self.discovered.values()]
 
     def add_discovered(self, agent_id: str) -> None:
         with self._lock:

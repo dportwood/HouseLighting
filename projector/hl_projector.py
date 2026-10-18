@@ -47,7 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DISCOVERY_PORT = 8091
 DISCOVERY_QUERY = b"HLPROJECTOR?"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv"}
@@ -226,16 +226,21 @@ def boot_cmdline() -> Path | None:
 
 
 def machine_id() -> str:
-    """Stable per-Pi id (survives reflashing the agent, not reflashing the OS)."""
+    """Stable per-Pi id: the OS machine id combined with the hostname.
+
+    The hostname is mixed in so a copied SD card gets its own id once its
+    hostname is changed (a copy keeps the original card's /etc/machine-id).
+    """
+    import hashlib
+    base = ""
     for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
         try:
-            text = Path(p).read_text().strip()
-            if text:
-                return text[:12]
+            base = Path(p).read_text().strip()
+            if base:
+                break
         except OSError:
             pass
-    import hashlib
-    return hashlib.sha1(socket.gethostname().encode()).hexdigest()[:12]
+    return hashlib.sha1(f"{base}:{socket.gethostname()}".encode()).hexdigest()[:12]
 
 
 class Agent:

@@ -314,3 +314,33 @@ def test_announcement_updates_address(tmp_path, agent, library):
         assert (proj.address, proj.port, proj.id) == ("127.0.0.1", http_port, a.id)
     finally:
         listener.close()
+
+
+
+def test_copied_cards_get_different_ids_once_the_hostname_changes(monkeypatch):
+    monkeypatch.setattr(hl.Path, "read_text", lambda self, *a, **k: "same-machine-id-from-a-copied-card")
+    monkeypatch.setattr(hl.socket, "gethostname", lambda: "projector1")
+    first = hl.machine_id()
+    monkeypatch.setattr(hl.socket, "gethostname", lambda: "projector2")
+    assert hl.machine_id() != first and len(first) == 12
+
+
+def test_updated_agent_with_new_id_is_matched_by_name_not_added_twice(tmp_path, library):
+    clock = {"t": 1000.0}
+    proj = ProjectorConfig("Projector 1", id="oldid0000000", address="10.0.0.5")
+    mgr = make_manager(tmp_path, 1, library, {"on": False}, projectors=[proj])
+    mgr.clock = lambda: clock["t"]
+    other = {"name": "Projector 2", "port": 8090, "mode": "sync", "version": "0.3.0", "hostname": "projector2"}
+    # A different projector with its own name doesn't steal Projector 1.
+    mgr.found([{**other, "id": "p2id00000000", "address": "10.0.0.6"}])
+    assert proj.id == "oldid0000000"
+    # Projector 1's id is still being heard: another agent also calling itself
+    # "Projector 1" (a copied card) must not take over.
+    mgr.found([{**other, "name": "Projector 1", "id": "oldid0000000", "address": "10.0.0.5"}])
+    mgr.found([{**other, "name": "Projector 1", "id": "clone0000000", "address": "10.0.0.7"}])
+    assert (proj.id, proj.address) == ("oldid0000000", "10.0.0.5")
+    # Later the old id has gone quiet and the updated agent answers with a new id: same projector.
+    clock["t"] += 600
+    mgr.found([{**other, "name": "Projector 1", "id": "newid0000000", "address": "10.0.0.5"}])
+    assert (proj.id, proj.address) == ("newid0000000", "10.0.0.5")
+    assert all("seen_t" not in d for d in mgr.discovered_list())

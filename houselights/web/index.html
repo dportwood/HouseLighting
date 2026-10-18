@@ -319,6 +319,10 @@
       <section>
         <h2 id="projEditTitle">Playlist</h2>
         <label class="toggle"><input type="checkbox" id="projShuffle"> Shuffle the order each round</label>
+        <div class="row" id="projCopyRow" style="align-items:center">
+          <select class="text" id="projCopyFrom" aria-label="Copy another projector's playlist"></select>
+          <button class="ghost small" id="projCopyBtn" style="flex:0 0 auto">Use this playlist</button>
+        </div>
         <h2 style="margin-top:12px">In the playlist <span class="meta" id="projDraftMeta"></span></h2>
         <ol class="proj-pl" id="projDraft"></ol>
       </section>
@@ -875,6 +879,10 @@ async function openProjEditor(i) {
   projDraft = [...p.playlist];
   projShuffle = p.shuffle;
   $("projEditTitle").textContent = `Playlist for ${p.name}`;
+  const others = projData.filter(x => x.index !== i && x.playlist.length);
+  $("projCopyRow").classList.toggle("hidden", !others.length);
+  $("projCopyFrom").replaceChildren(...others.map(x => el("option", { value: x.index,
+    textContent: `Start from ${x.name}'s playlist (${x.playlist.length} video${x.playlist.length === 1 ? "" : "s"})` })));
   $("projShuffle").checked = projShuffle;
   $("projSearch").value = "";
   $("projList").classList.add("hidden");
@@ -934,6 +942,15 @@ function renderLibrary() {
 }
 
 $("projSearch").addEventListener("input", renderLibrary);
+$("projCopyBtn").addEventListener("click", () => {
+  const src = projData.find(x => x.index === Number($("projCopyFrom").value));
+  if (!src) return;
+  if (projDraft.length && !confirm(`Replace this playlist with ${src.name}'s ${src.playlist.length} videos?`)) return;
+  projDraft = [...src.playlist];
+  projShuffle = src.shuffle;
+  $("projShuffle").checked = projShuffle;
+  renderProjDraft(); renderLibrary();
+});
 $("projShuffle").addEventListener("change", () => { projShuffle = $("projShuffle").checked; });
 $("projCancel").addEventListener("click", closeProjEditor);
 $("projSave").addEventListener("click", async () => {

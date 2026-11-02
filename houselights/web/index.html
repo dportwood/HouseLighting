@@ -121,6 +121,11 @@
   .proj-pl .name, .lib-files .name { font-weight: 600; overflow-wrap: anywhere; }
   .proj-pl .sub, .lib-files .sub { color: var(--muted); font-size: 13px; }
   .badge.warn { color: var(--warn); border-color: var(--warn); }
+  .badge.good { color: var(--ok); border-color: var(--ok); }
+  .badge.bad { color: var(--danger); border-color: var(--danger); }
+  .dot.bad { background: var(--danger); }
+  #ctrlList li { align-items: flex-start; }
+  #ctrlList .badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .progress { height: 10px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
   .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .8s linear; }
   .row-btns { display: flex; gap: 6px; flex: none; }
@@ -162,7 +167,7 @@
     <button role="tab" id="tabBtn-controls" aria-controls="tab-controls" aria-selected="true">Controls</button>
     <button role="tab" id="tabBtn-playlist" aria-controls="tab-playlist" aria-selected="false">Playlist</button>
     <button role="tab" id="tabBtn-schedule" aria-controls="tab-schedule" aria-selected="false">Schedule</button>
-    <button role="tab" id="tabBtn-projectors" aria-controls="tab-projectors" aria-selected="false" class="hidden">Projectors</button>
+    <button role="tab" id="tabBtn-projectors" aria-controls="tab-projectors" aria-selected="false">Devices</button>
     <button role="tab" id="tabBtn-kiosk" aria-controls="tab-kiosk" aria-selected="false" class="admin-only hidden">Kiosk</button>
   </nav>
   <div class="msg" id="msg" role="status" aria-live="polite"></div>
@@ -308,6 +313,10 @@
 
   <!-- ===== Projectors ===== -->
   <div class="tab hidden" id="tab-projectors" role="tabpanel">
+    <section id="ctrlSection">
+      <h2>Light controllers <span class="meta" id="ctrlMeta"></span></h2>
+      <ul class="proj-pl" id="ctrlList"></ul>
+    </section>
     <div class="tab" id="projList"></div>
     <section id="projFind">
       <h2>Find projectors <span class="meta" id="projScanMeta"></span></h2>
@@ -428,7 +437,7 @@ function dotsFor(colors) { return el("span", { class: "dots" }, ...colors.map(c 
 // ---------- admin / unlock ----------
 function applyAdmin() {
   document.querySelectorAll(".admin-only").forEach(n => n.classList.toggle("hidden", !isAdmin));
-  $("tabBtn-projectors").classList.toggle("hidden", !projectorCount && !isAdmin);
+  $("projFind").classList.toggle("hidden", !projectorCount && !isAdmin);
   $("unlock").classList.toggle("hidden", kioskMode || isAdmin || !tokenRequired || tab === "controls");
 }
 
@@ -455,7 +464,7 @@ function showTab(name) {
   applyAdmin();
   if (name === "playlist") loadPlaylist();
   if (name === "schedule") loadSchedule();
-  if (name === "projectors") loadProjectors();
+  if (name === "projectors") { ctrlKey = ""; loadControllers(); loadProjectors(); }
 }
 TABS.forEach(t => $("tabBtn-" + t).addEventListener("click", () => showTab(t)));
 addEventListener("hashchange", () => showTab(location.hash.slice(1)));
@@ -702,7 +711,47 @@ function videoLabel(path) {
   return { title, where };
 }
 
+let ctrlData = [], ctrlKey = "";
+async function loadControllers() {
+  if (document.hidden) return;
+  try { ctrlData = (await api("/api/controllers")).controllers; } catch { return; }
+  const down = ctrlData.filter(c => c.active && !c.skipped && c.online === false).length;
+  $("tabBtn-projectors").textContent = down ? "Devices ⚠" : "Devices";
+  $("tabBtn-projectors").title = down ? `${down} light controller${down > 1 ? "s" : ""} offline` : "";
+  if (tab === "projectors") renderControllers();
+}
+
+function renderControllers() {
+  const key = JSON.stringify(ctrlData.map(c => [c.online, c.mode, c.status, c.receiving, c.new_errors, c.error, c.skipped, c.ip, c.last_seen_at]));
+  if (key === ctrlKey) return;
+  ctrlKey = key;
+  const shown = ctrlData.filter(c => c.active);
+  const up = shown.filter(c => c.online).length;
+  $("ctrlMeta").textContent = shown.length ? `${up} of ${shown.length} online` : "";
+  const when = iso => iso ? new Date(iso).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
+  $("ctrlList").replaceChildren(...(shown.length ? shown.map(c => {
+    const dotClass = c.online === true ? "show" : c.online === false ? "bad" : "";
+    const detail = c.online === true
+      ? [c.mode && `${c.mode} mode`, c.status, c.hostname, c.version && `FPP ${c.version}`].filter(Boolean).join(" · ")
+      : c.online === false ? `${c.error || "Offline"}${c.last_seen_at ? ` · last seen ${when(c.last_seen_at)}` : " · not seen since the player started"}`
+      : "Checking…";
+    const badges = el("span", { class: "badges" });
+    if (c.skipped) badges.append(el("span", { class: "badge", textContent: "Skipped" }));
+    if (c.online === true && c.receiving) badges.append(el("span", { class: "badge good", textContent: "Receiving" }));
+    if (c.online === true && c.new_errors > 0) badges.append(el("span", { class: "badge warn", textContent: `${c.new_errors} new errors` }));
+    if (c.online === false) badges.append(el("span", { class: "badge bad", textContent: "Offline" }));
+    return el("li", {},
+      el("span", { class: "dot " + dotClass, style: "margin-top:6px" }),
+      el("div", { style: "flex:1" },
+        el("div", { class: "name", textContent: `${c.name} · ${c.ip}` }),
+        el("div", { class: "sub", textContent: `Channels ${c.first_channel}–${c.last_channel}` }),
+        el("div", { class: "sub", textContent: detail })),
+      badges);
+  }) : [el("p", { class: "empty", textContent: "No controllers in the xLights layout." })]));
+}
+
 async function loadProjectors() {
+  if (tab === "projectors") renderControllers();
   if (document.hidden || tab !== "projectors" || projEditing !== null) return;
   let d;
   try { d = await api("/api/projectors"); } catch { return; }
@@ -887,6 +936,7 @@ async function openProjEditor(i) {
   $("projSearch").value = "";
   $("projList").classList.add("hidden");
   $("projFind").classList.add("hidden");
+  $("ctrlSection").classList.add("hidden");
   $("projEdit").classList.remove("hidden");
   renderProjDraft(); renderLibrary();
   scrollTo(0, 0);
@@ -896,6 +946,7 @@ function closeProjEditor() {
   $("projEdit").classList.add("hidden");
   $("projList").classList.remove("hidden");
   $("projFind").classList.remove("hidden");
+  $("ctrlSection").classList.remove("hidden");
   loadProjectors();
 }
 
@@ -1316,6 +1367,8 @@ $("schedSave").addEventListener("click", async () => {
   setInterval(loadPlaylist, 1000);
   setInterval(() => loadSchedule(), 5000);
   setInterval(loadProjectors, 2000);
+  loadControllers();
+  setInterval(loadControllers, 5000);
 })();
 </script>
 </body>

@@ -173,7 +173,11 @@ def _serve(args) -> None:
     if cfg.projectors:
         where = [f"{p.name} ({p.target or 'found by scan'})" for p in cfg.projectors]
         print(f"Projectors: {', '.join(where)}; media: {cfg.media_dir}")
-    server = make_server(player, cfg.http_host, cfg.http_port, projectors)
+    from .controllers import ControllerMonitor
+
+    controllers = ControllerMonitor(layout, cfg.skip_controllers)
+    controllers.start()
+    server = make_server(player, cfg.http_host, cfg.http_port, projectors, controllers)
     serve_in_thread(server)
     print(f"Control page: http://localhost:{cfg.http_port}/  (Ctrl+C to stop)")
     try:
@@ -184,6 +188,7 @@ def _serve(args) -> None:
         player.stop()
         if projectors:
             projectors.stop_thread()
+        controllers.stop()
         server.shutdown()
         out.send(np.zeros(layout.total_channels, dtype=np.uint8))
         out.close()

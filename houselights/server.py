@@ -30,7 +30,8 @@ Admin (need `api_token` from the config, as X-Api-Token header or ?token=, when 
   POST /api/projectors/scan          look for projector agents on the network
   POST /api/projectors/add           {"id"} add a projector the scan found
 
-Also open: GET /api/projectors (status of each), GET /api/media (video library).
+Also open: GET /api/projectors (status of each), GET /api/media (video library),
+GET /api/controllers (light controllers: online, FPP mode, receiving DDP).
 
 Local only (from this computer):
   POST /api/shutdown       black out the lights and stop the player
@@ -76,8 +77,8 @@ class _Server(ThreadingHTTPServer):
               f"{traceback.format_exc()}", flush=True)
 
 
-def make_server(player: Player, host: str, port: int, projectors=None) -> ThreadingHTTPServer:
-    handler = type("Handler", (_Handler,), {"player": player, "projectors": projectors})
+def make_server(player: Player, host: str, port: int, projectors=None, controllers=None) -> ThreadingHTTPServer:
+    handler = type("Handler", (_Handler,), {"player": player, "projectors": projectors, "controllers": controllers})
     server = _Server((host, port), handler)
     server.daemon_threads = True
     return server
@@ -92,6 +93,7 @@ def serve_in_thread(server: ThreadingHTTPServer) -> threading.Thread:
 class _Handler(BaseHTTPRequestHandler):
     player: Player
     projectors = None  # ProjectorManager when projectors are configured
+    controllers = None  # ControllerMonitor
     server_version = "HouseLights"
 
     def log_message(self, fmt, *args):  # keep the console quiet; status polling is frequent
@@ -126,6 +128,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(self.player.schedule())
         if path == "/api/projectors":
             return self._json(self._projectors_payload())
+        if path == "/api/controllers":
+            return self._json({"controllers": self.controllers.snapshot() if self.controllers else []})
         if path == "/api/media":
             return self._json({"files": self.projectors.library.scan() if self.projectors else []})
         if path == "/api/sequences":

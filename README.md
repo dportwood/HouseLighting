@@ -54,7 +54,7 @@ Only one player may drive the lights at a time; a second `serve` refuses to star
 | **Controls** | Themes, colors (up to 16), effect, speed, band size, brightness and a live preview. **Which lights** picks all lights, an xLights group or a single string (each can also be turned off). Changes take over immediately and go back to the show after `override_minutes`, or right away with **Back to the show**. **Save to playlist** keeps the current look. |
 | **Playlist** | What's playing, progress and what's next; **Play** any item now. **Edit playlist**: rename, reorder, remove, change length/speed/brightness, shuffle, add `.fseq` files from the show folder. |
 | **Schedule** | Whether the show is on and when it next starts. Show times have days, on/off times (past midnight is fine), an optional date range and an on/off switch. |
-| **Projectors** | Each projector's mode, what it's playing, Play / Stop, its video playlist, **Sync now**, and **Ready for outside** / **Switch to sync mode**. **Scan for projectors** finds new ones. See [projector/README.md](projector/README.md). |
+| **Devices** | **Light controllers**: each one's online/offline state, FPP mode and whether the show's data is arriving (the tab shows ⚠ when one is offline). **Projectors**: mode, what's playing, Play / Stop, video playlist, **Sync now**, **Ready for outside** / **Switch to sync mode**, and **Scan for projectors**. See [projector/README.md](projector/README.md). |
 | **Kiosk** | Locks a device (e.g. a tablet outside) to a simple pattern maker. Visitors tap **Show it on the house!** and it plays for `kiosk_seconds`; the next visitor can make a new one any time. Leaving kiosk mode needs the PIN. |
 
 Outside show times the page refuses live changes (unless
